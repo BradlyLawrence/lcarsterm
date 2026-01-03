@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LCARS Terminal</title>
+    <link rel="stylesheet" href="/xterm/css/xterm.css" />
+    <link rel="stylesheet" href="style.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Antonio:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="lcars-app">
+        <!-- Header / Top Bar -->
+        <div class="lcars-header">
+            <div class="lcars-elbow-top-left"></div>
+            <div class="lcars-bar-horizontal">
+                <span class="lcars-title">TERMINAL ACCESS</span>
+            </div>
+            <div class="lcars-bar-end-right"></div>
+        </div>
+
+        <div class="lcars-body">
+            <!-- Left Sidebar -->
+            <div class="lcars-sidebar">
+                <div class="lcars-column">
+                    <div class="lcars-block lcars-u-1" id="btn-new-term">NEW</div>
+                    <div id="tabs-container">
+                        <!-- Tabs will be injected here -->
+                    </div>
+                    <div class="lcars-spacer"></div>
+                    <div class="lcars-block lcars-u-3" id="btn-settings">CONFIG</div>
+                    <div class="lcars-block lcars-u-2" id="btn-fullscreen">FULL</div>
+                    <div class="lcars-block lcars-u-4" id="btn-exit">EXIT</div>
+                </div>
+            </div>
+
+            <!-- Main Content Area -->
+            <div class="lcars-main">
+                <div class="lcars-elbow-bottom-left"></div>
+                <div class="terminal-wrapper" id="terminals-wrapper">
+                    <!-- Settings View -->
+                    <div id="settings-view" style="display: none; color: var(--lcars-orange); padding: 20px; height: 100%; overflow-y: auto;">
+                        <h2 style="border-bottom: 2px solid var(--lcars-purple); padding-bottom: 10px;">SYSTEM CONFIGURATION</h2>
+                        
+                        <div class="setting-group">
+                            <h3>VISIBILITY HOTKEY</h3>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <input type="text" id="hotkey-input" value="F8" readonly style="background: var(--lcars-bg); border: 1px solid var(--lcars-blue); color: var(--lcars-orange); padding: 5px 10px; font-family: var(--lcars-font); font-size: 18px; width: 100px; text-align: center; cursor: pointer;">
+                                <span style="font-size: 14px; color: var(--lcars-blue);">Click to record new hotkey</span>
+                            </div>
+                        </div>
+
+                        <div class="setting-group">
+                            <h3>CYCLE MONITOR HOTKEY</h3>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <input type="text" id="cycle-hotkey-input" value="F9" readonly style="background: var(--lcars-bg); border: 1px solid var(--lcars-blue); color: var(--lcars-orange); padding: 5px 10px; font-family: var(--lcars-font); font-size: 18px; width: 100px; text-align: center; cursor: pointer;">
+                                <span style="font-size: 14px; color: var(--lcars-blue);">Click to record new hotkey</span>
+                            </div>
+                        </div>
+
+                        <div class="setting-group">
+                            <h3>LCARS THEME</h3>
+                            <div class="theme-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px;">
+                                <div class="theme-option" data-theme="default" style="border: 1px solid var(--lcars-orange); padding: 10px; cursor: pointer;">
+                                    <div style="height: 20px; background: #FF9900; margin-bottom: 5px;"></div>
+                                    <div style="height: 20px; background: #CC99CC;"></div>
+                                    <div style="text-align: center; margin-top: 5px;">TNG (Default)</div>
+                                </div>
+                                <div class="theme-option" data-theme="voyager" style="border: 1px solid #9999CC; padding: 10px; cursor: pointer;">
+                                    <div style="height: 20px; background: #9999CC; margin-bottom: 5px;"></div>
+                                    <div style="height: 20px; background: #CC6666;"></div>
+                                    <div style="text-align: center; margin-top: 5px;">VOYAGER</div>
+                                </div>
+                                <div class="theme-option" data-theme="ds9" style="border: 1px solid #FFCC99; padding: 10px; cursor: pointer;">
+                                    <div style="height: 20px; background: #FFCC99; margin-bottom: 5px;"></div>
+                                    <div style="height: 20px; background: #CC99CC;"></div>
+                                    <div style="text-align: center; margin-top: 5px;">DS9</div>
+                                </div>
+                                <div class="theme-option" data-theme="nemesis" style="border: 1px solid #3366CC; padding: 10px; cursor: pointer;">
+                                    <div style="height: 20px; background: #3366CC; margin-bottom: 5px;"></div>
+                                    <div style="height: 20px; background: #99CCFF;"></div>
+                                    <div style="text-align: center; margin-top: 5px;">NEMESIS</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Terminals will be injected here -->
+                </div>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="lcars-footer">
+            <div class="lcars-bar-horizontal-bottom">
+                <span class="lcars-status">ONLINE</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Context Menu -->
+    <div id="context-menu" class="lcars-context-menu" style="display: none;">
+        <div class="lcars-menu-item" id="ctx-copy">COPY</div>
+        <div class="lcars-menu-item" id="ctx-paste">PASTE</div>
+        <div class="lcars-menu-item" id="ctx-search">SEARCH</div>
+        <div class="lcars-menu-separator"></div>
+        <div class="lcars-menu-item" id="ctx-hide">HIDE</div>
+        <div class="lcars-menu-item" id="ctx-exit">EXIT</div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/xterm/lib/xterm.js"></script>
+    <script src="/xterm-addon-fit/lib/addon-fit.js"></script>
+    <script src="/xterm-addon-web-links/lib/addon-web-links.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

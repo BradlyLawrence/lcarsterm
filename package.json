@@ -1,0 +1,36 @@
+{
+  "name": "lcars-terminal",
+  "version": "1.0.0",
+  "description": "LCARS style Linux terminal using node-pty and xterm.js",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "server": "node server.js",
+    "dist": "electron-builder"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-web-links": "^0.11.0",
+    "@xterm/xterm": "^5.5.0",
+    "express": "^4.18.2",
+    "node-pty": "^1.0.0",
+    "socket.io": "^4.7.2"
+  },
+  "devDependencies": {
+    "electron": "^39.2.7",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.lcarsterm.app",
+    "productName": "LCARS Terminal",
+    "linux": {
+      "target": "AppImage",
+      "category": "Utility",
+      "icon": "public/icon.png"
+    },
+    "files": [
+      "**/*",
+      "!dist/*"
+    ]
+  }
+}
