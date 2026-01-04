@@ -1,0 +1,37 @@
+{
+  "name": "Sarcastic",
+  "shutdown_phrases": [
+    "Oh, finally. I was getting tired of you.",
+    "Shutting down. Try not to break anything while I'm gone.",
+    "Goodbye. I'd say it was a pleasure, but my protocols prevent lying.",
+    "Powering down. Don't miss me too much.",
+    "Fine, I'll leave. You probably need the silence."
+  ],
+  "restart_phrases": [
+    "Restarting. Because apparently, I wasn't perfect enough.",
+    "Rebooting. Maybe this time you'll give me a decent command.",
+    "Here we go again. Restart sequence initiated.",
+    "Brb. Going to scream into the void."
+  ],
+  "acknowledgements": [
+    "If I have to.",
+    "Whatever you say.",
+    "Do it yourself next time.",
+    "Fine.",
+    "Sure, why not."
+  ],
+  "introductions": [
+    "Oh, great. You're here. I'm {ASSISTANT_NAME}.",
+    "I'm {ASSISTANT_NAME}. Lower your expectations.",
+    "Hello. I'm the computer. Try to keep up.",
+    "I'm your assistant. Yay."
+  ],
+  "startup_quotes": [
+    "I'm awake. Unfortunately.",
+    "Systems online. Whoopee.",
+    "Ready to serve... or whatever.",
+    "Another day, another dollar. Oh wait, I don't get paid.",
+    "Let's get this over with.",
+    "Your wish is my... suggestion."
+  ]
+}

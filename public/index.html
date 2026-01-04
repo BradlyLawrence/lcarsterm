@@ -6,6 +6,7 @@
     <title>LCARS Terminal</title>
     <link rel="stylesheet" href="/xterm/css/xterm.css" />
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="commands.css" />
     <link href="https://fonts.googleapis.com/css2?family=Antonio:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -28,6 +29,8 @@
                         <!-- Tabs will be injected here -->
                     </div>
                     <div class="lcars-spacer"></div>
+                    <div class="lcars-block lcars-u-2" id="btn-voice" style="display: none;">VOICE</div>
+                    <div class="lcars-block lcars-u-2" id="btn-logs" style="display: none;">LOGS</div>
                     <div class="lcars-block lcars-u-3" id="btn-settings">CONFIG</div>
                     <div class="lcars-block lcars-u-2" id="btn-fullscreen">FULL</div>
                     <div class="lcars-block lcars-u-4" id="btn-exit">EXIT</div>
@@ -39,7 +42,7 @@
                 <div class="lcars-elbow-bottom-left"></div>
                 <div class="terminal-wrapper" id="terminals-wrapper">
                     <!-- Settings View -->
-                    <div id="settings-view" style="display: none; color: var(--lcars-orange); padding: 20px; height: 100%; overflow-y: auto;">
+                    <div id="settings-view" style="display: none; color: var(--lcars-orange); padding: 20px; height: 100%; overflow-y: auto; box-sizing: border-box;">
                         <h2 style="border-bottom: 2px solid var(--lcars-purple); padding-bottom: 10px;">SYSTEM CONFIGURATION</h2>
                         
                         <div class="setting-group">
@@ -55,6 +58,109 @@
                             <div style="display: flex; gap: 10px; align-items: center;">
                                 <input type="text" id="cycle-hotkey-input" value="F9" readonly style="background: var(--lcars-bg); border: 1px solid var(--lcars-blue); color: var(--lcars-orange); padding: 5px 10px; font-family: var(--lcars-font); font-size: 18px; width: 100px; text-align: center; cursor: pointer;">
                                 <span style="font-size: 14px; color: var(--lcars-blue);">Click to record new hotkey</span>
+                            </div>
+                        </div>
+
+                        <div class="setting-group">
+                            <h3>VOICE ASSISTANT</h3>
+                            
+                            <!-- Presets -->
+                            <div style="border-bottom: 1px solid var(--lcars-blue); padding-bottom: 15px; margin-bottom: 15px;">
+                                <label style="display: block; margin-bottom: 5px;">PRESETS</label>
+                                <div style="display: flex; gap: 10px;">
+                                    <select id="voice-preset" class="lcars-input" style="flex: 1;">
+                                        <option value="">-- Select Preset --</option>
+                                    </select>
+                                    <button id="btn-load-preset" class="lcars-button">LOAD</button>
+                                    <button id="btn-save-preset" class="lcars-button">SAVE AS...</button>
+                                    <button id="btn-delete-preset" class="lcars-button" style="background-color: var(--lcars-red);">DELETE</button>
+                                </div>
+                            </div>
+
+                            <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
+                                <label class="lcars-toggle">
+                                    <input type="checkbox" id="voice-enabled-toggle">
+                                    <span class="slider"></span>
+                                </label>
+                                <span>ENABLE VOICE COMMANDS</span>
+                            </div>
+                            
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                                <div>
+                                    <label style="display: block; margin-bottom: 5px;">USER RANK</label>
+                                    <input type="text" id="user-rank" class="lcars-input" style="width: 100%;">
+                                </div>
+                                <div>
+                                    <label style="display: block; margin-bottom: 5px;">USER NAME</label>
+                                    <input type="text" id="user-name" class="lcars-input" style="width: 100%;">
+                                </div>
+                                <div>
+                                    <label style="display: block; margin-bottom: 5px;">USER SURNAME</label>
+                                    <input type="text" id="user-surname" class="lcars-input" style="width: 100%;">
+                                </div>
+                                <div>
+                                    <label style="display: block; margin-bottom: 5px;">ASSISTANT NAME</label>
+                                    <input type="text" id="assistant-name" class="lcars-input" style="width: 100%;">
+                                </div>
+                            </div>
+
+                            <div style="margin-top: 15px;">
+                                <label style="display: block; margin-bottom: 5px;">PHONETIC ALTERNATIVES (Comma separated)</label>
+                                <input type="text" id="phonetic-alternatives" class="lcars-input" style="width: 100%;" placeholder="e.g. helio, leeo">
+                            </div>
+
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 15px;">
+                                <div>
+                                    <label style="display: block; margin-bottom: 5px;">CALENDAR URL (ICS)</label>
+                                    <input type="text" id="calendar-url" class="lcars-input" style="width: 100%;" placeholder="local or https://...">
+                                </div>
+                                <div>
+                                    <label style="display: block; margin-bottom: 5px;">WEATHER LOCATION</label>
+                                    <input type="text" id="weather-location" class="lcars-input" style="width: 100%;" placeholder="City Name">
+                                </div>
+                            </div>
+                            
+                            <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 20px; margin-top: 20px;">
+                                <div>
+                                    <label style="display: block; margin-bottom: 5px;">VOICE MODEL</label>
+                                    <select id="voice-model" class="lcars-input" style="width: 100%;"></select>
+                                </div>
+                                <div>
+                                    <label style="display: block; margin-bottom: 5px;">SPEAKER ID</label>
+                                    <input type="number" id="speaker-id" class="lcars-input" style="width: 100%;" value="0">
+                                </div>
+                                <div>
+                                    <label style="display: block; margin-bottom: 5px;">PERSONALITY</label>
+                                    <div style="display: flex; gap: 5px;">
+                                        <select id="personality" class="lcars-input" style="flex: 1;"></select>
+                                        <button id="btn-edit-personality" class="lcars-button" style="width: auto; padding: 0 10px;">EDIT</button>
+                                        <button id="btn-new-personality" class="lcars-button" style="width: auto; padding: 0 10px;">NEW</button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div style="margin-top: 15px;">
+                                <div style="display: flex; gap: 10px; align-items: center;">
+                                    <label class="lcars-toggle">
+                                        <input type="checkbox" id="voice-ack-toggle">
+                                        <span class="slider"></span>
+                                    </label>
+                                    <span>ENABLE VOICE ACKNOWLEDGEMENT</span>
+                                </div>
+                            </div>
+
+                            <div style="margin-top: 10px;">
+                                <div style="display: flex; gap: 10px; align-items: center;">
+                                    <label class="lcars-toggle">
+                                        <input type="checkbox" id="startup-briefing-toggle">
+                                        <span class="slider"></span>
+                                    </label>
+                                    <span>ENABLE STARTUP BRIEFING</span>
+                                </div>
+                            </div>
+                            
+                            <div style="margin-top: 15px; text-align: right;">
+                                <button id="btn-save-voice-settings" class="lcars-button">SAVE VOICE SETTINGS</button>
                             </div>
                         </div>
 
@@ -84,6 +190,65 @@
                             </div>
                         </div>
                     </div>
+                    <!-- Voice Config View -->
+                    <div id="voice-view" style="display: none; color: var(--lcars-orange); padding: 20px; height: 100%; box-sizing: border-box;">
+                        <h2 style="border-bottom: 2px solid var(--lcars-purple); padding-bottom: 10px; margin-top: 0; flex: 0 0 auto;">VOICE COMMAND CONFIGURATION</h2>
+                        <div style="display: flex; gap: 20px; flex: 1; min-height: 0;">
+                            <div style="flex: 1; display: flex; flex-direction: column;">
+                                <h3>COMMANDS</h3>
+                                <div id="commands-list" style="flex: 1; overflow-y: auto; border: 1px solid var(--lcars-blue); padding: 10px;"></div>
+                                <div style="margin-top: 10px; display: flex; gap: 10px;">
+                                    <button id="btn-add-command" class="lcars-button">ADD NEW</button>
+                                </div>
+                            </div>
+                            <div style="flex: 2; display: flex; flex-direction: column; gap: 10px;">
+                                <h3>EDITOR</h3>
+                                <div class="setting-group">
+                                    <label>Trigger Phrase:</label>
+                                    <input type="text" id="cmd-trigger" class="lcars-input" style="width: 100%;">
+                                </div>
+                                <div class="setting-group">
+                                    <label>Response:</label>
+                                    <input type="text" id="cmd-response" class="lcars-input" style="width: 100%;">
+                                </div>
+                                <div class="setting-group">
+                                    <label>Action (Shell Command):</label>
+                                    <textarea id="cmd-action" class="lcars-input" style="width: 100%; height: 100px;"></textarea>
+                                </div>
+                                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                                    <button id="btn-delete-command" class="lcars-button" style="background-color: var(--lcars-red);">DELETE</button>
+                                    <button id="btn-save-command" class="lcars-button">SAVE</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Logs View -->
+                    <div id="logs-view" style="display: none; color: var(--lcars-orange); padding: 20px; height: 100%; box-sizing: border-box;">
+                        <h2 style="border-bottom: 2px solid var(--lcars-purple); padding-bottom: 10px; margin-top: 0; flex: 0 0 auto;">CAPTAIN'S LOG</h2>
+                        <div style="display: flex; gap: 20px; flex: 1; min-height: 0;">
+                            <div style="flex: 1; display: flex; flex-direction: column;">
+                                <h3>LOG ENTRIES</h3>
+                                <div id="logs-list" style="flex: 1; overflow-y: auto; border: 1px solid var(--lcars-blue); padding: 10px;"></div>
+                                <div style="margin-top: 10px; display: flex; gap: 10px;">
+                                    <button id="btn-new-log" class="lcars-button">NEW ENTRY</button>
+                                </div>
+                            </div>
+                            <div style="flex: 3; display: flex; flex-direction: column;">
+                                <h3>ENTRY CONTENT</h3>
+                                <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                                    <input type="text" id="log-title" class="lcars-input" placeholder="Stardate / Title" style="flex: 1;">
+                                    <button id="btn-play-log" class="lcars-button" style="background-color: var(--lcars-success); display: none;">PLAY RECORDING</button>
+                                </div>
+                                <textarea id="log-content" class="lcars-input" style="flex: 1; margin-bottom: 10px; font-family: monospace;"></textarea>
+                                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                                    <button id="btn-delete-log" class="lcars-button" style="background-color: var(--lcars-red);">DELETE</button>
+                                    <button id="btn-save-log" class="lcars-button">SAVE LOG</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Terminals will be injected here -->
                 </div>
             </div>
@@ -105,6 +270,37 @@
         <div class="lcars-menu-separator"></div>
         <div class="lcars-menu-item" id="ctx-hide">HIDE</div>
         <div class="lcars-menu-item" id="ctx-exit">EXIT</div>
+    </div>
+
+    <!-- Personality Editor Modal -->
+    <div id="personality-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000; padding: 40px; box-sizing: border-box;">
+        <div style="background: #000; border: 2px solid var(--lcars-orange); border-radius: 20px; height: 100%; display: flex; flex-direction: column; padding: 20px; color: var(--lcars-orange);">
+            <h2 style="color: var(--lcars-orange); border-bottom: 1px solid var(--lcars-purple); padding-bottom: 10px;">PERSONALITY EDITOR</h2>
+            <div style="margin-bottom: 10px;">
+                <label>Filename (e.g. my_personality):</label>
+                <input type="text" id="personality-filename" class="lcars-input" style="width: 100%;">
+            </div>
+            <label>JSON Content:</label>
+            <textarea id="personality-content" class="lcars-input" style="flex: 1; font-family: monospace; margin-bottom: 10px;"></textarea>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button id="btn-close-personality" class="lcars-button" style="background-color: var(--lcars-blue);">CANCEL</button>
+                <button id="btn-delete-personality-file" class="lcars-button" style="background-color: var(--lcars-red);">DELETE FILE</button>
+                <button id="btn-save-personality" class="lcars-button">SAVE CHANGES</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LCARS Generic Modal (Alert/Confirm/Prompt) -->
+    <div id="lcars-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 2000; align-items: center; justify-content: center;">
+        <div style="background: #000; border: 2px solid var(--lcars-orange); border-radius: 20px; width: 500px; max-width: 90%; padding: 20px; display: flex; flex-direction: column; gap: 20px; box-shadow: 0 0 20px rgba(255, 153, 0, 0.2);">
+            <h3 id="modal-title" style="color: var(--lcars-orange); margin: 0; border-bottom: 2px solid var(--lcars-purple); padding-bottom: 10px; font-size: 24px;">SYSTEM ALERT</h3>
+            <div id="modal-message" style="color: var(--lcars-blue); font-size: 20px; line-height: 1.4;"></div>
+            <input type="text" id="modal-input" class="lcars-input" style="display: none; width: 100%; font-size: 20px;">
+            <div style="display: flex; justify-content: flex-end; gap: 15px;">
+                <button id="modal-btn-cancel" class="lcars-button" style="background-color: var(--lcars-red);">CANCEL</button>
+                <button id="modal-btn-ok" class="lcars-button">OK</button>
+            </div>
+        </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>

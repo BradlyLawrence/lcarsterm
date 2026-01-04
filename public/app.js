@@ -38,6 +38,104 @@ const termTheme = {
     brightWhite: '#FFFFFF'
 };
 
+// New DOM Elements
+const btnVoice = document.getElementById('btn-voice');
+const btnLogs = document.getElementById('btn-logs');
+const voiceView = document.getElementById('voice-view');
+const logsView = document.getElementById('logs-view');
+const voiceEnabledToggle = document.getElementById('voice-enabled-toggle');
+const userRankInput = document.getElementById('user-rank');
+const userNameInput = document.getElementById('user-name');
+const userSurnameInput = document.getElementById('user-surname');
+const assistantNameInput = document.getElementById('assistant-name');
+const calendarUrlInput = document.getElementById('calendar-url');
+const weatherLocationInput = document.getElementById('weather-location');
+const phoneticAlternativesInput = document.getElementById('phonetic-alternatives');
+const voiceModelSelect = document.getElementById('voice-model');
+const speakerIdInput = document.getElementById('speaker-id');
+const personalitySelect = document.getElementById('personality');
+const voiceAckToggle = document.getElementById('voice-ack-toggle');
+const startupBriefingToggle = document.getElementById('startup-briefing-toggle');
+const btnSaveVoiceSettings = document.getElementById('btn-save-voice-settings');
+
+// Presets Elements
+const voicePresetSelect = document.getElementById('voice-preset');
+const btnLoadPreset = document.getElementById('btn-load-preset');
+const btnSavePreset = document.getElementById('btn-save-preset');
+const btnDeletePreset = document.getElementById('btn-delete-preset');
+
+// Personality Editor Elements
+const btnEditPersonality = document.getElementById('btn-edit-personality');
+const btnNewPersonality = document.getElementById('btn-new-personality');
+const personalityModal = document.getElementById('personality-modal');
+const personalityFilenameInput = document.getElementById('personality-filename');
+const personalityContentInput = document.getElementById('personality-content');
+const btnClosePersonality = document.getElementById('btn-close-personality');
+const btnDeletePersonalityFile = document.getElementById('btn-delete-personality-file');
+const btnSavePersonality = document.getElementById('btn-save-personality');
+
+// Voice Config Elements
+const commandsList = document.getElementById('commands-list');
+const cmdTrigger = document.getElementById('cmd-trigger');
+const cmdResponse = document.getElementById('cmd-response');
+const cmdAction = document.getElementById('cmd-action');
+const btnAddCommand = document.getElementById('btn-add-command');
+const btnSaveCommand = document.getElementById('btn-save-command');
+const btnDeleteCommand = document.getElementById('btn-delete-command');
+
+// Logs Elements
+const logsList = document.getElementById('logs-list');
+const logTitle = document.getElementById('log-title');
+const logContent = document.getElementById('log-content');
+const btnNewLog = document.getElementById('btn-new-log');
+const btnSaveLog = document.getElementById('btn-save-log');
+const btnDeleteLog = document.getElementById('btn-delete-log');
+const btnPlayLog = document.getElementById('btn-play-log');
+
+let currentSettings = {};
+let currentCommands = {};
+let currentLogs = [];
+let selectedCommandKey = null;
+let selectedLogFile = null;
+let audioPlayer = null;
+
+function switchView(viewId) {
+    // Hide all views
+    document.getElementById('settings-view').style.display = 'none';
+    voiceView.style.display = 'none';
+    logsView.style.display = 'none';
+    
+    // Hide all terminals
+    document.querySelectorAll('.terminal-container').forEach(el => el.style.display = 'none');
+    
+    // Reset button states
+    btnSettings.classList.remove('active');
+    btnVoice.classList.remove('active');
+    btnLogs.classList.remove('active');
+    
+    // Show requested view
+    if (viewId === 'terminals') {
+        if (activeTermId && terminals[activeTermId]) {
+            terminals[activeTermId].element.style.display = 'block';
+            terminals[activeTermId].fitAddon.fit();
+            terminals[activeTermId].term.focus();
+        }
+    } else if (viewId === 'settings') {
+        document.getElementById('settings-view').style.display = 'block';
+        btnSettings.classList.add('active');
+    } else if (viewId === 'voice') {
+        voiceView.style.display = 'flex';
+        voiceView.style.flexDirection = 'column';
+        btnVoice.classList.add('active');
+        loadCommands();
+    } else if (viewId === 'logs') {
+        logsView.style.display = 'flex';
+        logsView.style.flexDirection = 'column';
+        btnLogs.classList.add('active');
+        loadLogs();
+    }
+}
+
 // Debounce helper
 function debounce(func, wait) {
     let timeout;
@@ -423,7 +521,13 @@ if (window.electronAPI) {
     });
 }
 
-btnSettings.addEventListener('click', toggleSettings);
+btnSettings.addEventListener('click', () => {
+    if (document.getElementById('settings-view').style.display !== 'none') {
+        switchView('terminals');
+    } else {
+        switchView('settings');
+    }
+});
 
 themeOptions.forEach(opt => {
     opt.addEventListener('click', () => {
@@ -489,7 +593,10 @@ cycleHotkeyInput.addEventListener('click', () => {
     document.addEventListener('keydown', handler);
 });
 
-btnNewTerm.addEventListener('click', createTerminal);
+btnNewTerm.addEventListener('click', () => {
+    createTerminal();
+    switchView('terminals');
+});
 
 btnFullscreen.addEventListener('click', () => {
     if (window.electronAPI) {
@@ -613,3 +720,723 @@ ctxExit.addEventListener('click', () => {
     }
     contextMenu.style.display = 'none';
 });
+
+// --- Voice & Logs Logic ---
+
+async function loadSettings() {
+    currentSettings = await window.electronAPI.readSettings();
+    
+    // Load lists
+    const voices = await window.electronAPI.getVoices();
+    const personalities = await window.electronAPI.getPersonalities();
+    const presets = await window.electronAPI.getPresets();
+    
+    // Populate dropdowns
+    voiceModelSelect.innerHTML = '';
+    voices.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v.path;
+        opt.textContent = v.name;
+        voiceModelSelect.appendChild(opt);
+    });
+    
+    personalitySelect.innerHTML = '';
+    personalities.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.path;
+        opt.textContent = p.name;
+        personalitySelect.appendChild(opt);
+    });
+
+    voicePresetSelect.innerHTML = '<option value="">-- Select Preset --</option>';
+    presets.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.name;
+        opt.textContent = p.name;
+        voicePresetSelect.appendChild(opt);
+    });
+    
+    // Update UI
+    if (voiceEnabledToggle) {
+        voiceEnabledToggle.checked = currentSettings.voice_enabled || false;
+    }
+    
+    if (userRankInput) userRankInput.value = currentSettings.user_rank || 'Captain';
+    if (userNameInput) userNameInput.value = currentSettings.user_name || 'Bradly';
+    if (userSurnameInput) userSurnameInput.value = currentSettings.user_surname || 'User';
+    if (assistantNameInput) assistantNameInput.value = currentSettings.assistant_name || 'Leo';
+    if (calendarUrlInput) calendarUrlInput.value = currentSettings.calendar_url || 'local';
+    if (weatherLocationInput) weatherLocationInput.value = currentSettings.weather_location || 'Cape Town';
+    if (phoneticAlternativesInput) phoneticAlternativesInput.value = (currentSettings.phonetic_alternatives || []).join(', ');
+    if (voiceAckToggle) voiceAckToggle.checked = currentSettings.voice_ack_enabled || false;
+    if (startupBriefingToggle) startupBriefingToggle.checked = currentSettings.startup_briefing_enabled || false;
+    
+    if (voiceModelSelect) voiceModelSelect.value = currentSettings.voice_path || '';
+    if (speakerIdInput) speakerIdInput.value = currentSettings.speaker_id || '0';
+    if (personalitySelect) personalitySelect.value = currentSettings.personality_file || '';
+    
+    // Toggle buttons
+    if (currentSettings.voice_enabled) {
+        btnVoice.style.display = 'block';
+        btnLogs.style.display = 'block';
+    } else {
+        btnVoice.style.display = 'none';
+        btnLogs.style.display = 'none';
+    }
+}
+
+async function saveSettings() {
+    currentSettings.voice_enabled = voiceEnabledToggle.checked;
+    currentSettings.user_rank = userRankInput.value;
+    currentSettings.user_name = userNameInput.value;
+    currentSettings.user_surname = userSurnameInput.value;
+    currentSettings.assistant_name = assistantNameInput.value;
+    currentSettings.calendar_url = calendarUrlInput.value;
+    currentSettings.weather_location = weatherLocationInput.value;
+    currentSettings.phonetic_alternatives = phoneticAlternativesInput.value.split(',').map(s => s.trim()).filter(s => s);
+    currentSettings.voice_ack_enabled = voiceAckToggle.checked;
+    currentSettings.startup_briefing_enabled = startupBriefingToggle.checked;
+    
+    currentSettings.voice_path = voiceModelSelect.value;
+    currentSettings.speaker_id = speakerIdInput.value;
+    currentSettings.personality_file = personalitySelect.value;
+    
+    await window.electronAPI.writeSettings(currentSettings);
+    // await window.electronAPI.toggleVoice(currentSettings.voice_enabled); // Removed to prevent double restart
+    
+    // Update UI visibility immediately
+    if (currentSettings.voice_enabled) {
+        btnVoice.style.display = 'block';
+        btnLogs.style.display = 'block';
+    } else {
+        btnVoice.style.display = 'none';
+        btnLogs.style.display = 'none';
+    }
+}
+
+let collapsedCategories = new Set();
+let draggedItem = null;
+
+async function loadCommands() {
+    currentCommands = await window.electronAPI.readCommands();
+    renderCommandsList();
+}
+
+function renderCommandsList() {
+    commandsList.innerHTML = '';
+    
+    const entries = Object.entries(currentCommands);
+    let currentCategoryDiv = null;
+    let currentContentDiv = null;
+    
+    // Helper to create default category if needed
+    const ensureCategory = () => {
+        if (!currentContentDiv) {
+            const { catDiv, contentDiv } = createCategory('General Commands', 'default');
+            currentCategoryDiv = catDiv;
+            currentContentDiv = contentDiv;
+            commandsList.appendChild(catDiv);
+        }
+    };
+
+    // If empty or first item is not a comment, start with default
+    if (entries.length > 0 && !entries[0][0].startsWith('__COMMENT__')) {
+        ensureCategory();
+    }
+    
+    entries.forEach(([key, value]) => {
+        if (key.startsWith('__COMMENT__')) {
+            const { catDiv, contentDiv } = createCategory(value, key);
+            currentCategoryDiv = catDiv;
+            currentContentDiv = contentDiv;
+            commandsList.appendChild(catDiv);
+        } else {
+            ensureCategory();
+            const item = createCommandItem(key, value);
+            currentContentDiv.appendChild(item);
+        }
+    });
+}
+
+function createCategory(title, id) {
+    const container = document.createElement('div');
+    container.className = 'command-category';
+    container.dataset.id = id;
+    container.dataset.title = title;
+    container.draggable = true; // Allow reordering categories
+
+    const header = document.createElement('div');
+    header.className = 'category-header';
+    header.innerHTML = `<span>${title}</span> <span class="toggle-icon">▼</span>`;
+    
+    header.onclick = (e) => {
+        e.stopPropagation();
+        const content = container.querySelector('.category-content');
+        content.classList.toggle('collapsed');
+        const icon = header.querySelector('.toggle-icon');
+        if (content.classList.contains('collapsed')) {
+            collapsedCategories.add(id);
+            icon.textContent = '▶';
+        } else {
+            collapsedCategories.delete(id);
+            icon.textContent = '▼';
+        }
+    };
+    
+    if (collapsedCategories.has(id)) {
+        header.querySelector('.toggle-icon').textContent = '▶';
+    }
+
+    const content = document.createElement('div');
+    content.className = 'category-content';
+    if (collapsedCategories.has(id)) content.classList.add('collapsed');
+    
+    // Drag events for the category itself
+    container.addEventListener('dragstart', (e) => {
+        draggedItem = container;
+        container.classList.add('dragging');
+        e.stopPropagation();
+    });
+    
+    container.addEventListener('dragend', () => {
+        container.classList.remove('dragging');
+        draggedItem = null;
+        saveCommandOrder();
+    });
+
+    // Allow dropping items into this category's content
+    content.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (draggedItem && draggedItem.classList.contains('command-item')) {
+            const afterElement = getDragAfterElement(content, e.clientY);
+            if (afterElement == null) {
+                content.appendChild(draggedItem);
+            } else {
+                content.insertBefore(draggedItem, afterElement);
+            }
+        }
+    });
+
+    container.appendChild(header);
+    container.appendChild(content);
+    
+    return { catDiv: container, contentDiv: content };
+}
+
+function createCommandItem(key, value) {
+    const div = document.createElement('div');
+    div.className = 'command-item';
+    div.draggable = true;
+    div.dataset.key = key;
+    
+    if (key === selectedCommandKey) div.classList.add('active');
+    
+    div.innerHTML = `<span class="drag-handle">::</span> <span>${key}</span>`;
+    
+    div.onclick = (e) => {
+        e.stopPropagation();
+        selectCommand(key);
+    };
+    
+    div.addEventListener('dragstart', (e) => {
+        draggedItem = div;
+        div.classList.add('dragging');
+        e.stopPropagation();
+    });
+    
+    div.addEventListener('dragend', () => {
+        div.classList.remove('dragging');
+        draggedItem = null;
+        saveCommandOrder();
+    });
+    
+    return div;
+}
+
+// Allow reordering categories within the main list
+commandsList.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    if (draggedItem && draggedItem.classList.contains('command-category')) {
+        const afterElement = getDragAfterElement(commandsList, e.clientY);
+        if (afterElement == null) {
+            commandsList.appendChild(draggedItem);
+        } else {
+            commandsList.insertBefore(draggedItem, afterElement);
+        }
+    }
+});
+
+function getDragAfterElement(container, y) {
+    const draggableElements = [...container.querySelectorAll(':scope > .draggable:not(.dragging)')];
+    // Since we didn't add .draggable class, use specific classes
+    const selector = container.classList.contains('category-content') ? '.command-item:not(.dragging)' : '.command-category:not(.dragging)';
+    const elements = [...container.querySelectorAll(selector)];
+
+    return elements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
+async function saveCommandOrder() {
+    const newCommands = {};
+    
+    const categories = commandsList.querySelectorAll('.command-category');
+    categories.forEach(cat => {
+        const catId = cat.dataset.id;
+        const catTitle = cat.dataset.title;
+        
+        // Add category header if it's not the default/implicit one
+        if (catId !== 'default') {
+            newCommands[catId] = catTitle;
+        }
+        
+        const items = cat.querySelectorAll('.command-item');
+        items.forEach(item => {
+            const key = item.dataset.key;
+            // Preserve existing value
+            if (currentCommands[key] !== undefined) {
+                newCommands[key] = currentCommands[key];
+            }
+        });
+    });
+    
+    currentCommands = newCommands;
+    await window.electronAPI.writeCommands(currentCommands);
+}
+
+function selectCommand(key) {
+    selectedCommandKey = key;
+    
+    // Update UI active state
+    document.querySelectorAll('.command-item').forEach(el => {
+        if (el.dataset.key === key) el.classList.add('active');
+        else el.classList.remove('active');
+    });
+    
+    const val = currentCommands[key];
+    cmdTrigger.value = key;
+    
+    // Parse value
+    let action = '';
+    let response = '';
+    
+    if (typeof val === 'string') {
+        action = val;
+        // Try to extract response:  cmd && {base_dir}/ai-speak.sh "Response"
+        const match = action.match(/^(.*)\s*&&\s*\{base_dir\}\/ai-speak\.sh\s*"(.*)"$/);
+        if (match) {
+            action = match[1].trim();
+            response = match[2];
+        }
+    } else if (val && typeof val === 'object') {
+        action = val.action || '';
+        response = val.response || '';
+    }
+    
+    cmdAction.value = action;
+    cmdResponse.value = response;
+}
+
+async function saveCommand() {
+    const trigger = cmdTrigger.value.trim();
+    if (!trigger) return;
+    
+    // If renaming, delete old key
+    if (selectedCommandKey && selectedCommandKey !== trigger) {
+        delete currentCommands[selectedCommandKey];
+    }
+    
+    let finalAction = cmdAction.value.trim();
+    const response = cmdResponse.value.trim();
+    
+    if (response) {
+        finalAction = `${finalAction} && {base_dir}/ai-speak.sh "${response}"`;
+    }
+    
+    currentCommands[trigger] = finalAction;
+    
+    await window.electronAPI.writeCommands(currentCommands);
+    selectedCommandKey = trigger;
+    renderCommandsList();
+}
+
+async function deleteCommand() {
+    if (!selectedCommandKey) return;
+    
+    if (confirm('Delete command "' + selectedCommandKey + '"?')) {
+        delete currentCommands[selectedCommandKey];
+        await window.electronAPI.writeCommands(currentCommands);
+        selectedCommandKey = null;
+        cmdTrigger.value = '';
+        cmdResponse.value = '';
+        cmdAction.value = '';
+        renderCommandsList();
+    }
+}
+
+async function loadLogs() {
+    const files = await window.electronAPI.readLogs();
+    currentLogs = files.sort().reverse(); // Newest first
+    renderLogsList();
+}
+
+function renderLogsList() {
+    logsList.innerHTML = '';
+    currentLogs.forEach(log => {
+        const div = document.createElement('div');
+        div.className = 'list-item';
+        if (selectedLogFile && log.id === selectedLogFile.id) div.classList.add('active');
+        
+        // Add icon if audio exists
+        let text = log.display;
+        if (log.hasAudio) text += ' 🔊';
+        
+        div.textContent = text;
+        div.onclick = () => selectLog(log);
+        logsList.appendChild(div);
+    });
+}
+
+async function selectLog(log) {
+    selectedLogFile = log;
+    renderLogsList();
+    
+    const content = await window.electronAPI.readLog(log.id);
+    logTitle.value = log.display;
+    logContent.value = content;
+    
+    // Show/Hide Play Button
+    if (log.hasAudio) {
+        btnPlayLog.style.display = 'block';
+    } else {
+        btnPlayLog.style.display = 'none';
+    }
+    
+    // Stop any current playback
+    if (audioPlayer) {
+        audioPlayer.pause();
+        audioPlayer = null;
+        btnPlayLog.textContent = 'PLAY RECORDING';
+    }
+}
+
+async function playLog() {
+    if (!selectedLogFile || !selectedLogFile.hasAudio) return;
+    
+    if (audioPlayer && !audioPlayer.paused) {
+        audioPlayer.pause();
+        btnPlayLog.textContent = 'PLAY RECORDING';
+        return;
+    }
+    
+    const audioData = await window.electronAPI.readLogAudio(selectedLogFile.id);
+    if (audioData) {
+        audioPlayer = new Audio(audioData);
+        audioPlayer.onended = () => {
+            btnPlayLog.textContent = 'PLAY RECORDING';
+        };
+        audioPlayer.play();
+        btnPlayLog.textContent = 'STOP PLAYBACK';
+    }
+}
+
+async function saveLog() {
+    const title = logTitle.value.trim();
+    if (!title) return;
+    
+    // If renaming, delete old file
+    if (selectedLogFile && selectedLogFile.id !== title) {
+        await window.electronAPI.deleteLog(selectedLogFile.id);
+    }
+    
+    await window.electronAPI.writeLog(title, logContent.value);
+    
+    // Refresh list
+    loadLogs();
+    
+    // Select the new/updated log
+    // We need to find it in the new list
+    setTimeout(() => {
+        const newLog = currentLogs.find(l => l.id === title);
+        if (newLog) selectLog(newLog);
+    }, 100);
+}
+
+async function deleteLog() {
+    if (!selectedLogFile) return;
+    
+    if (confirm('Delete log "' + selectedLogFile.display + '"?')) {
+        await window.electronAPI.deleteLog(selectedLogFile.id);
+        selectedLogFile = null;
+        logTitle.value = '';
+        logContent.value = '';
+        btnPlayLog.style.display = 'none';
+        loadLogs();
+    }
+}
+
+// Event Listeners
+btnVoice.addEventListener('click', () => switchView('voice'));
+btnLogs.addEventListener('click', () => switchView('logs'));
+
+// Settings Listeners
+btnSaveVoiceSettings.addEventListener('click', saveSettings);
+
+btnAddCommand.addEventListener('click', () => {
+    selectedCommandKey = null;
+    cmdTrigger.value = '';
+    cmdResponse.value = '';
+    cmdAction.value = '';
+    renderCommandsList();
+    cmdTrigger.focus();
+});
+
+btnSaveCommand.addEventListener('click', saveCommand);
+btnDeleteCommand.addEventListener('click', deleteCommand);
+
+btnNewLog.addEventListener('click', () => {
+    selectedLogFile = null;
+    logTitle.value = '';
+    logContent.value = '';
+    btnPlayLog.style.display = 'none';
+    renderLogsList();
+    logTitle.focus();
+});
+
+btnSaveLog.addEventListener('click', saveLog);
+btnDeleteLog.addEventListener('click', deleteLog);
+btnPlayLog.addEventListener('click', playLog);
+
+// Initialize
+loadSettings();
+
+// --- LCARS Modal Logic ---
+function showLcarsModal(options) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('lcars-modal');
+        const titleEl = document.getElementById('modal-title');
+        const msgEl = document.getElementById('modal-message');
+        const inputEl = document.getElementById('modal-input');
+        const btnOk = document.getElementById('modal-btn-ok');
+        const btnCancel = document.getElementById('modal-btn-cancel');
+
+        titleEl.textContent = (options.title || 'SYSTEM ALERT').toUpperCase();
+        msgEl.textContent = options.message || '';
+        
+        inputEl.style.display = options.type === 'prompt' ? 'block' : 'none';
+        inputEl.value = options.defaultValue || '';
+        
+        btnCancel.style.display = options.type === 'alert' ? 'none' : 'block';
+        
+        modal.style.display = 'flex';
+        
+        if (options.type === 'prompt') {
+            setTimeout(() => inputEl.focus(), 50);
+        } else {
+            setTimeout(() => btnOk.focus(), 50);
+        }
+
+        const close = (result) => {
+            modal.style.display = 'none';
+            // Remove listeners
+            btnOk.onclick = null;
+            btnCancel.onclick = null;
+            inputEl.onkeydown = null;
+            resolve(result);
+        };
+
+        btnOk.onclick = () => {
+            if (options.type === 'prompt') close(inputEl.value);
+            else close(true);
+        };
+
+        btnCancel.onclick = () => close(options.type === 'prompt' ? null : false);
+
+        if (options.type === 'prompt') {
+            inputEl.onkeydown = (e) => {
+                if (e.key === 'Enter') btnOk.click();
+                if (e.key === 'Escape') btnCancel.click();
+            };
+        }
+    });
+}
+
+// Presets Logic
+btnLoadPreset.addEventListener('click', async () => {
+    const presetName = voicePresetSelect.value;
+    if (!presetName) return;
+    
+    const preset = await window.electronAPI.readPreset(presetName);
+    if (preset) {
+        if (preset.user_rank) userRankInput.value = preset.user_rank;
+        if (preset.user_name) userNameInput.value = preset.user_name;
+        if (preset.user_surname) userSurnameInput.value = preset.user_surname;
+        if (preset.assistant_name) assistantNameInput.value = preset.assistant_name;
+        if (preset.phonetic_alternatives) phoneticAlternativesInput.value = (preset.phonetic_alternatives || []).join(', ');
+        if (preset.voice_path) voiceModelSelect.value = preset.voice_path;
+        if (preset.speaker_id) speakerIdInput.value = preset.speaker_id;
+        
+        // Try direct match first
+        let matched = false;
+        for (let i = 0; i < personalitySelect.options.length; i++) {
+            if (personalitySelect.options[i].value === preset.personality_file) {
+                personalitySelect.selectedIndex = i;
+                matched = true;
+                break;
+            }
+        }
+        
+        // If not matched, try to match by filename
+        if (!matched && preset.personality_file) {
+             const presetBase = preset.personality_file.split(/[/\\]/).pop();
+             for (let i = 0; i < personalitySelect.options.length; i++) {
+                const optBase = personalitySelect.options[i].value.split(/[/\\]/).pop();
+                if (optBase === presetBase) {
+                    personalitySelect.selectedIndex = i;
+                    break;
+                }
+            }
+        }
+
+        if (preset.voice_ack_enabled !== undefined) voiceAckToggle.checked = preset.voice_ack_enabled;
+        
+        await showLcarsModal({ type: 'alert', title: 'PRESET LOADED', message: 'Preset loaded successfully. Click SAVE VOICE SETTINGS to apply changes.' });
+    }
+});
+
+btnSavePreset.addEventListener('click', async () => {
+    const name = await showLcarsModal({ type: 'prompt', title: 'SAVE PRESET', message: 'Enter a name for this preset:' });
+    if (!name) return;
+    
+    const preset = {
+        user_rank: userRankInput.value,
+        user_name: userNameInput.value,
+        user_surname: userSurnameInput.value,
+        assistant_name: assistantNameInput.value,
+        phonetic_alternatives: phoneticAlternativesInput.value.split(',').map(s => s.trim()).filter(s => s),
+        voice_path: voiceModelSelect.value,
+        speaker_id: speakerIdInput.value,
+        personality_file: personalitySelect.value,
+        voice_ack_enabled: voiceAckToggle.checked
+    };
+    
+    await window.electronAPI.writePreset(name, preset);
+    
+    // Refresh preset list without reloading all settings
+    const presets = await window.electronAPI.getPresets();
+    voicePresetSelect.innerHTML = '<option value="">-- Select Preset --</option>';
+    presets.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.name;
+        opt.textContent = p.name;
+        voicePresetSelect.appendChild(opt);
+    });
+    
+    // Select the new preset
+    voicePresetSelect.value = name;
+    
+    await showLcarsModal({ type: 'alert', title: 'PRESET SAVED', message: `Preset "${name}" saved successfully.` });
+});
+
+btnDeletePreset.addEventListener('click', async () => {
+    const presetName = voicePresetSelect.value;
+    if (!presetName) return;
+    
+    const confirmed = await showLcarsModal({ type: 'confirm', title: 'DELETE PRESET', message: `Are you sure you want to delete preset "${presetName}"?` });
+    if (confirmed) {
+        await window.electronAPI.deletePreset(presetName);
+        loadSettings(); // Refresh list
+    }
+});
+
+// Personality Editor Logic
+btnEditPersonality.addEventListener('click', async () => {
+    const path = personalitySelect.value;
+    if (!path) return;
+    
+    const parts = path.split(/[/\\]/);
+    const filename = parts[parts.length - 1].replace('.json', '');
+    
+    const content = await window.electronAPI.readPersonality(filename);
+    personalityFilenameInput.value = filename;
+    personalityContentInput.value = content;
+    personalityModal.style.display = 'block';
+});
+
+btnNewPersonality.addEventListener('click', () => {
+    personalityFilenameInput.value = '';
+    personalityContentInput.value = '{\n    "startup_quotes": [\n        "System ready."\n    ],\n    "shutdown_quotes": [\n        "Shutting down."\n    ]\n}';
+    personalityModal.style.display = 'block';
+});
+
+btnClosePersonality.addEventListener('click', () => {
+    personalityModal.style.display = 'none';
+});
+
+btnSavePersonality.addEventListener('click', async () => {
+    const filename = personalityFilenameInput.value.trim();
+    const content = personalityContentInput.value;
+    
+    if (!filename) {
+        await showLcarsModal({ type: 'alert', title: 'ERROR', message: 'Filename required' });
+        return;
+    }
+    
+    try {
+        JSON.parse(content); // Validate JSON
+    } catch (e) {
+        await showLcarsModal({ type: 'alert', title: 'JSON ERROR', message: 'Invalid JSON: ' + e.message });
+        return;
+    }
+    
+    await window.electronAPI.writePersonality(filename, content);
+    personalityModal.style.display = 'none';
+    loadSettings(); // Refresh list
+});
+
+btnDeletePersonalityFile.addEventListener('click', async () => {
+    const filename = personalityFilenameInput.value.trim();
+    if (!filename) return;
+    
+    const confirmed = await showLcarsModal({ type: 'confirm', title: 'DELETE FILE', message: `Delete personality "${filename}"?` });
+    if (confirmed) {
+        await window.electronAPI.deletePersonality(filename);
+        personalityModal.style.display = 'none';
+        loadSettings(); // Refresh list
+    }
+});
+
+async function deleteCommand() {
+    if (!selectedCommandKey) return;
+    
+    const confirmed = await showLcarsModal({ type: 'confirm', title: 'DELETE COMMAND', message: 'Delete command "' + selectedCommandKey + '"?' });
+    if (confirmed) {
+        delete currentCommands[selectedCommandKey];
+        await window.electronAPI.writeCommands(currentCommands);
+        selectedCommandKey = null;
+        cmdTrigger.value = '';
+        cmdResponse.value = '';
+        cmdAction.value = '';
+        renderCommandsList();
+    }
+}
+
+async function deleteLog() {
+    if (!selectedLogFile) return;
+    
+    const confirmed = await showLcarsModal({ type: 'confirm', title: 'DELETE LOG', message: 'Delete log "' + selectedLogFile.display + '"?' });
+    if (confirmed) {
+        await window.electronAPI.deleteLog(selectedLogFile.id);
+        selectedLogFile = null;
+        logTitle.value = '';
+        logContent.value = '';
+        btnPlayLog.style.display = 'none';
+        loadLogs();
+    }
+}

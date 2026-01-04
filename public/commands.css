@@ -1,0 +1,68 @@
+
+/* Command List Styles */
+.command-category {
+    margin-bottom: 10px;
+    border: 1px solid var(--lcars-blue);
+    border-radius: 0 0 10px 0;
+}
+
+.category-header {
+    background-color: var(--lcars-blue);
+    color: var(--lcars-bg);
+    padding: 5px 10px;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+}
+
+.category-header:hover {
+    background-color: var(--lcars-purple);
+}
+
+.category-content {
+    display: block;
+}
+
+.category-content.collapsed {
+    display: none;
+}
+
+.command-item {
+    padding: 8px 10px;
+    cursor: pointer;
+    border-bottom: 1px solid #333;
+    display: flex;
+    align-items: center;
+    transition: background-color 0.2s;
+}
+
+.command-item:hover {
+    background-color: rgba(255, 153, 0, 0.2);
+}
+
+.command-item.active {
+    background-color: var(--lcars-orange);
+    color: var(--lcars-bg);
+}
+
+.command-item.dragging {
+    opacity: 0.5;
+    background-color: var(--lcars-red);
+}
+
+.category-header.dragging {
+    opacity: 0.5;
+}
+
+.drag-handle {
+    margin-right: 10px;
+    cursor: grab;
+    opacity: 0.5;
+}
+
+.drag-handle:hover {
+    opacity: 1;
+}

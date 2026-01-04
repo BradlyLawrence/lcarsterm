@@ -1,14 +1,17 @@
 const { app, BrowserWindow, ipcMain, globalShortcut, screen, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { fork } = require('child_process');
+const os = require('os');
+const { fork, spawn } = require('child_process');
 
 let serverProcess;
+let voiceProcess;
 let mainWindow;
 let currentHotkey = null;
 let currentCycleHotkey = null;
 let isFakeFullScreen = false;
 let savedWindowBounds = null;
+let isQuitting = false;
 
 const stateFile = path.join(app.getPath('userData'), 'window-state.json');
 
@@ -85,6 +88,159 @@ function saveState(state) {
   }
 }
 
+function getScriptPath(relativePath) {
+    let p = path.join(__dirname, relativePath);
+    if (app.isPackaged) {
+        const unpackedPath = p.replace('app.asar', 'app.asar.unpacked');
+        if (fs.existsSync(unpackedPath)) {
+            return unpackedPath;
+        }
+    }
+    return p;
+}
+
+const LCARS_ROOT = app.getPath('userData');
+const USER_SETTINGS_PATH = path.join(LCARS_ROOT, 'galactica_settings.json');
+const USER_COMMANDS_PATH = path.join(LCARS_ROOT, 'commands.json');
+const USER_VOICES_DIR = path.join(LCARS_ROOT, 'voices');
+const USER_PERSONALITIES_DIR = path.join(LCARS_ROOT, 'personalities');
+const USER_PRESETS_DIR = path.join(LCARS_ROOT, 'presets');
+
+const BUNDLED_SETTINGS_PATH = getScriptPath('voiceassistant/galactica_settings.json');
+const BUNDLED_COMMANDS_PATH = getScriptPath('voiceassistant/commands.json');
+const BUNDLED_VOICES_DIR = getScriptPath('voiceassistant/voices');
+const BUNDLED_PERSONALITIES_DIR = getScriptPath('voiceassistant/personalities');
+const BUNDLED_PRESETS_DIR = getScriptPath('voiceassistant/presets');
+
+// Helper to copy directory recursively
+function copyDirSync(src, dest) {
+    if (!fs.existsSync(src)) return;
+    if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+    const entries = fs.readdirSync(src, { withFileTypes: true });
+    for (let entry of entries) {
+        const srcPath = path.join(src, entry.name);
+        const destPath = path.join(dest, entry.name);
+        if (entry.isDirectory()) {
+            copyDirSync(srcPath, destPath);
+        } else {
+            if (!fs.existsSync(destPath)) { // Only copy if not exists (don't overwrite user changes)
+                fs.copyFileSync(srcPath, destPath);
+            }
+        }
+    }
+}
+
+// Initialize User Data
+try {
+    // 1. Settings
+    if (!fs.existsSync(USER_SETTINGS_PATH)) {
+        if (fs.existsSync(BUNDLED_SETTINGS_PATH)) {
+            fs.copyFileSync(BUNDLED_SETTINGS_PATH, USER_SETTINGS_PATH);
+        } else {
+            fs.writeFileSync(USER_SETTINGS_PATH, JSON.stringify({
+                "user_rank": "Ensign",
+                "user_name": "Wesley",
+                "user_surname": "Crusher",
+                "assistant_name": "Computer",
+                "calendar_url": "local",
+                "weather_location": "Cape Town",
+                "voice_path": "voices/fedcomp/en_US-fedcomp-medium.onnx",
+                "personality_file": "personalities/lcars.json",
+                "voice_enabled": true,
+                "startup_briefing_enabled": true
+            }, null, 4));
+        }
+    }
+
+    // 2. Commands
+    if (!fs.existsSync(USER_COMMANDS_PATH) && fs.existsSync(BUNDLED_COMMANDS_PATH)) {
+        fs.copyFileSync(BUNDLED_COMMANDS_PATH, USER_COMMANDS_PATH);
+    }
+
+    // 3. Directories
+    copyDirSync(BUNDLED_VOICES_DIR, USER_VOICES_DIR);
+    copyDirSync(BUNDLED_PERSONALITIES_DIR, USER_PERSONALITIES_DIR);
+    copyDirSync(BUNDLED_PRESETS_DIR, USER_PRESETS_DIR);
+
+} catch (e) {
+    console.error('Failed to initialize user data:', e);
+}
+
+const LOG_DIR = path.join(os.homedir(), 'Documents/Logs');
+const PYTHON_PATH = path.join(os.homedir(), '.leo/.venv/bin/python');
+const VOICE_SCRIPT = getScriptPath('voiceassistant/voice-command.py');
+const BRIEFING_SCRIPT = getScriptPath('voiceassistant/startup-briefing.sh');
+
+function startVoiceAssistant(isAppStart = false) {
+    if (voiceProcess) return;
+    
+    console.log('Starting Voice Assistant...');
+    if (fs.existsSync(PYTHON_PATH) && fs.existsSync(VOICE_SCRIPT)) {
+        // Check for startup briefing
+        try {
+            if (isAppStart && fs.existsSync(USER_SETTINGS_PATH)) {
+                const settings = JSON.parse(fs.readFileSync(USER_SETTINGS_PATH, 'utf8'));
+                if (settings.startup_briefing_enabled && fs.existsSync(BRIEFING_SCRIPT)) {
+                    console.log('Running startup briefing...');
+                    const briefingProcess = spawn('/bin/bash', [BRIEFING_SCRIPT], {
+                        stdio: 'ignore',
+                        env: { ...process.env, LCARS_SETTINGS_PATH: USER_SETTINGS_PATH }
+                    });
+                    briefingProcess.on('error', (err) => console.error('Briefing error:', err));
+                    briefingProcess.unref(); // Don't wait for it
+                }
+            }
+        } catch (e) {
+            console.error('Error checking startup briefing:', e);
+        }
+
+        // Spawn detached to get a new process group, allowing us to kill the whole tree
+        voiceProcess = spawn(PYTHON_PATH, [VOICE_SCRIPT], {
+            stdio: ['ignore', 'inherit', 'inherit'],
+            detached: true,
+            env: { ...process.env, LCARS_SETTINGS_PATH: USER_SETTINGS_PATH }
+        });
+        
+        voiceProcess.on('error', (err) => {
+            console.error('Failed to start voice assistant:', err);
+        });
+        
+        voiceProcess.on('exit', (code, signal) => {
+            console.log(`Voice assistant exited with code ${code} and signal ${signal}`);
+            voiceProcess = null;
+        });
+    } else {
+        console.error('Python environment or voice script not found.');
+    }
+}
+
+function stopVoiceAssistant() {
+    if (voiceProcess) {
+        console.log('Stopping Voice Assistant...');
+        try {
+            // Kill the process group (negative PID)
+            process.kill(-voiceProcess.pid, 'SIGTERM');
+            
+            // Double tap with SIGKILL after a short delay if it's still running
+            const pid = voiceProcess.pid;
+            setTimeout(() => {
+                try {
+                    process.kill(-pid, 'SIGKILL');
+                } catch (e) { /* ignore */ }
+            }, 1000);
+            
+        } catch (e) {
+            console.error('Error killing voice process group:', e);
+            try {
+                voiceProcess.kill();
+            } catch (e2) {
+                console.error('Error killing voice process:', e2);
+            }
+        }
+        voiceProcess = null;
+    }
+}
+
 async function createWindow() {
   const state = loadState();
   
@@ -118,6 +274,18 @@ async function createWindow() {
 
   mainWindow.loadURL(`http://localhost:${port}`);
     
+  // Check voice settings
+  try {
+      if (fs.existsSync(USER_SETTINGS_PATH)) {
+          const settings = JSON.parse(fs.readFileSync(USER_SETTINGS_PATH, 'utf8'));
+          if (settings.voice_enabled) {
+              startVoiceAssistant(true);
+          }
+      }
+  } catch (e) {
+      console.error('Failed to load voice settings:', e);
+  }
+
   // Handle initial args
   const args = parseArgs(process.argv);
   if (args.newTab || args.command || args.title || args.closeTitle) {
@@ -274,6 +442,332 @@ ipcMain.handle('set-cycle-hotkey', (event, hotkey) => {
   }
 });
 
+// Voice Assistant IPC
+ipcMain.handle('read-commands', async () => {
+    try {
+        if (fs.existsSync(USER_COMMANDS_PATH)) {
+            return JSON.parse(fs.readFileSync(USER_COMMANDS_PATH, 'utf8'));
+        }
+        return {};
+    } catch (e) {
+        console.error('Error reading commands:', e);
+        return {};
+    }
+});
+
+ipcMain.handle('write-commands', async (event, commands) => {
+    try {
+        fs.writeFileSync(USER_COMMANDS_PATH, JSON.stringify(commands, null, 4));
+        return true;
+    } catch (e) {
+        console.error('Error writing commands:', e);
+        return false;
+    }
+});
+
+ipcMain.handle('read-settings', async () => {
+    try {
+        if (fs.existsSync(USER_SETTINGS_PATH)) {
+            const settings = JSON.parse(fs.readFileSync(USER_SETTINGS_PATH, 'utf8'));
+            
+            // Hydrate paths: If relative, make absolute to LCARS_ROOT
+            const hydrate = (p) => {
+                if (!p) return p;
+                if (!path.isAbsolute(p)) {
+                    return path.join(LCARS_ROOT, p);
+                }
+                return p;
+            };
+            
+            settings.voice_path = hydrate(settings.voice_path);
+            settings.personality_file = hydrate(settings.personality_file);
+
+            return settings;
+        }
+        return {};
+    } catch (e) {
+        console.error('Error reading settings:', e);
+        return {};
+    }
+});
+
+ipcMain.handle('write-settings', async (event, settings) => {
+    try {
+        // Dehydrate paths: Make relative to LCARS_ROOT
+        const dehydrate = (p) => {
+            if (p && p.startsWith(LCARS_ROOT)) {
+                return path.relative(LCARS_ROOT, p);
+            }
+            return p;
+        };
+        
+        const settingsToSave = { ...settings };
+        settingsToSave.voice_path = dehydrate(settings.voice_path);
+        settingsToSave.personality_file = dehydrate(settings.personality_file);
+
+        fs.writeFileSync(USER_SETTINGS_PATH, JSON.stringify(settingsToSave, null, 4));
+        
+        // Restart voice assistant if running to apply settings
+        stopVoiceAssistant();
+        
+        if (settings.voice_enabled) {
+            // Give it a moment to die completely
+            setTimeout(() => {
+                startVoiceAssistant(false);
+            }, 1500);
+        }
+        return true;
+    } catch (e) {
+        console.error('Error writing settings:', e);
+        return false;
+    }
+});
+
+ipcMain.handle('read-logs', async () => {
+    try {
+        if (!fs.existsSync(LOG_DIR)) return [];
+        // Return list of log objects { id, display, hasAudio, hasText }
+        const files = fs.readdirSync(LOG_DIR);
+        const logs = {};
+        
+        files.forEach(f => {
+            const base = path.parse(f).name;
+            if (!logs[base]) logs[base] = { id: base, display: base, hasAudio: false, hasText: false };
+            
+            if (f.endsWith('.wav')) logs[base].hasAudio = true;
+            if (f.endsWith('.txt') || f.endsWith('.md')) logs[base].hasText = true;
+        });
+        
+        return Object.values(logs).filter(l => l.hasAudio || l.hasText).sort((a, b) => b.id.localeCompare(a.id));
+    } catch (e) {
+        console.error('Error reading logs:', e);
+        return [];
+    }
+});
+
+ipcMain.handle('read-log', async (event, filename) => {
+    try {
+        // Try .txt first, then .md
+        let filePath = path.join(LOG_DIR, filename + '.txt');
+        if (!fs.existsSync(filePath)) {
+            filePath = path.join(LOG_DIR, filename + '.md');
+        }
+        
+        if (fs.existsSync(filePath)) {
+            return fs.readFileSync(filePath, 'utf8');
+        }
+        return '';
+    } catch (e) {
+        console.error('Error reading log:', e);
+        return '';
+    }
+});
+
+ipcMain.handle('read-log-audio', async (event, filename) => {
+    try {
+        const filePath = path.join(LOG_DIR, filename + '.wav');
+        if (fs.existsSync(filePath)) {
+            const buffer = fs.readFileSync(filePath);
+            return `data:audio/wav;base64,${buffer.toString('base64')}`;
+        }
+        return null;
+    } catch (e) {
+        console.error('Error reading log audio:', e);
+        return null;
+    }
+});
+
+ipcMain.handle('write-log', async (event, filename, content) => {
+    try {
+        if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+        // Ensure extension
+        if (!filename.endsWith('.txt')) filename += '.txt';
+        const filePath = path.join(LOG_DIR, filename);
+        fs.writeFileSync(filePath, content);
+        return true;
+    } catch (e) {
+        console.error('Error writing log:', e);
+        return false;
+    }
+});
+
+ipcMain.handle('delete-log', async (event, filename) => {
+    try {
+        // Delete both txt and wav
+        const txtPath = path.join(LOG_DIR, filename + '.txt');
+        const mdPath = path.join(LOG_DIR, filename + '.md');
+        const wavPath = path.join(LOG_DIR, filename + '.wav');
+        
+        if (fs.existsSync(txtPath)) fs.unlinkSync(txtPath);
+        if (fs.existsSync(mdPath)) fs.unlinkSync(mdPath);
+        if (fs.existsSync(wavPath)) fs.unlinkSync(wavPath);
+        
+        return true;
+    } catch (e) {
+        console.error('Error deleting log:', e);
+        return false;
+    }
+});
+
+ipcMain.handle('toggle-voice', async (event, enabled) => {
+    if (enabled) {
+        startVoiceAssistant(false);
+    } else {
+        stopVoiceAssistant();
+    }
+    return !!voiceProcess;
+});
+
+ipcMain.handle('get-voice-status', async () => {
+    return !!voiceProcess;
+});
+
+ipcMain.handle('get-voices', async () => {
+    try {
+        if (!fs.existsSync(USER_VOICES_DIR)) return [];
+        const voices = [];
+        
+        // Recursive search for .onnx files
+        function scanDir(dir) {
+            const files = fs.readdirSync(dir);
+            for (const file of files) {
+                const fullPath = path.join(dir, file);
+                const stat = fs.statSync(fullPath);
+                if (stat.isDirectory()) {
+                    scanDir(fullPath);
+                } else if (file.endsWith('.onnx')) {
+                    voices.push({
+                        name: path.basename(dir) + ' - ' + path.basename(file, '.onnx'),
+                        path: fullPath
+                    });
+                }
+            }
+        }
+        
+        scanDir(USER_VOICES_DIR);
+        return voices;
+    } catch (e) {
+        console.error('Error scanning voices:', e);
+        return [];
+    }
+});
+
+ipcMain.handle('get-personalities', async () => {
+    try {
+        if (!fs.existsSync(USER_PERSONALITIES_DIR)) return [];
+        return fs.readdirSync(USER_PERSONALITIES_DIR)
+            .filter(f => f.endsWith('.json'))
+            .map(f => ({
+                name: path.basename(f, '.json'),
+                path: path.join(USER_PERSONALITIES_DIR, f)
+            }));
+    } catch (e) {
+        console.error('Error scanning personalities:', e);
+        return [];
+    }
+});
+
+ipcMain.handle('read-personality', async (event, filename) => {
+    try {
+        const filePath = path.join(USER_PERSONALITIES_DIR, filename + (filename.endsWith('.json') ? '' : '.json'));
+        if (fs.existsSync(filePath)) {
+            return fs.readFileSync(filePath, 'utf8');
+        }
+        return '{}';
+    } catch (e) {
+        console.error('Error reading personality:', e);
+        return '{}';
+    }
+});
+
+ipcMain.handle('write-personality', async (event, filename, content) => {
+    try {
+        if (!fs.existsSync(USER_PERSONALITIES_DIR)) fs.mkdirSync(USER_PERSONALITIES_DIR, { recursive: true });
+        const filePath = path.join(USER_PERSONALITIES_DIR, filename + (filename.endsWith('.json') ? '' : '.json'));
+        fs.writeFileSync(filePath, content);
+        return true;
+    } catch (e) {
+        console.error('Error writing personality:', e);
+        return false;
+    }
+});
+
+ipcMain.handle('delete-personality', async (event, filename) => {
+    try {
+        const filePath = path.join(USER_PERSONALITIES_DIR, filename + (filename.endsWith('.json') ? '' : '.json'));
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            return true;
+        }
+        return false;
+    } catch (e) {
+        console.error('Error deleting personality:', e);
+        return false;
+    }
+});
+
+ipcMain.handle('get-presets', async () => {
+    try {
+        const presets = [];
+        if (fs.existsSync(USER_PRESETS_DIR)) {
+            const files = fs.readdirSync(USER_PRESETS_DIR).filter(f => f.endsWith('.json'));
+            files.forEach(f => {
+                presets.push({
+                    name: path.basename(f, '.json'),
+                    path: path.join(USER_PRESETS_DIR, f),
+                    type: 'user'
+                });
+            });
+        }
+        return presets;
+    } catch (e) {
+        console.error('Error scanning presets:', e);
+        return [];
+    }
+});
+
+ipcMain.handle('read-preset', async (event, filename) => {
+    try {
+        const name = filename.endsWith('.json') ? filename : filename + '.json';
+        const userPath = path.join(USER_PRESETS_DIR, name);
+        if (fs.existsSync(userPath)) {
+            return JSON.parse(fs.readFileSync(userPath, 'utf8'));
+        }
+        return null;
+    } catch (e) {
+        console.error('Error reading preset:', e);
+        return null;
+    }
+});
+
+ipcMain.handle('write-preset', async (event, filename, content) => {
+    try {
+        if (!fs.existsSync(USER_PRESETS_DIR)) fs.mkdirSync(USER_PRESETS_DIR, { recursive: true });
+        const name = filename.endsWith('.json') ? filename : filename + '.json';
+        const filePath = path.join(USER_PRESETS_DIR, name);
+        fs.writeFileSync(filePath, JSON.stringify(content, null, 4));
+        return true;
+    } catch (e) {
+        console.error('Error writing preset:', e);
+        return false;
+    }
+});
+
+ipcMain.handle('delete-preset', async (event, filename) => {
+    try {
+        const name = filename.endsWith('.json') ? filename : filename + '.json';
+        const filePath = path.join(USER_PRESETS_DIR, name);
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            return true;
+        }
+        return false;
+    } catch (e) {
+        console.error('Error deleting preset:', e);
+        return false;
+    }
+});
+
 function startServer() {
   return new Promise((resolve, reject) => {
     // Run the existing server.js as a child process
@@ -301,6 +795,18 @@ app.on('window-all-closed', function () {
   if (process.platform !== 'darwin') app.quit();
 });
 
+app.on('before-quit', (event) => {
+  if (voiceProcess && !isQuitting) {
+    event.preventDefault();
+    stopVoiceAssistant();
+    // Give it a moment to die completely before quitting the app
+    setTimeout(() => {
+      isQuitting = true;
+      app.quit();
+    }, 1000);
+  }
+});
+
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });
@@ -309,6 +815,7 @@ app.on('quit', () => {
   if (serverProcess) {
     serverProcess.kill();
   }
+  stopVoiceAssistant();
 });
 
 app.on('activate', function () {

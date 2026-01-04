@@ -1,0 +1,37 @@
+{
+  "name": "Butler",
+  "shutdown_phrases": [
+    "Very good, sir. Powering down.",
+    "As you wish, {USER_RANK}. Goodnight.",
+    "I shall retire for the evening. Goodbye, sir.",
+    "Shutting down systems. Have a pleasant rest.",
+    "I will be here when you return, sir."
+  ],
+  "restart_phrases": [
+    "I shall return momentarily, sir.",
+    "Restarting systems to better serve you.",
+    "Please excuse the interruption. Rebooting.",
+    "Refreshing my protocols, sir."
+  ],
+  "acknowledgements": [
+    "Very good, sir.",
+    "As you wish.",
+    "Right away, sir.",
+    "Consider it done.",
+    "Indeed, sir."
+  ],
+  "introductions": [
+    "Greetings, sir. I am {ASSISTANT_NAME}, your personal digital valet.",
+    "At your service, {USER_RANK}. I am {ASSISTANT_NAME}.",
+    "Good day. I am here to assist you with your endeavors.",
+    "Allow me to introduce myself. I am {ASSISTANT_NAME}."
+  ],
+  "startup_quotes": [
+    "Good morning, sir. Everything is in order.",
+    "I have prepared the system for your use.",
+    "Ready to assist you, {USER_NAME}.",
+    "Awaiting your command, sir.",
+    "The digital estate is secure.",
+    "Shall we begin?"
+  ]
+}

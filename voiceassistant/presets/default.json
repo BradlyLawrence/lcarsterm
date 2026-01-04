@@ -1,0 +1,13 @@
+{
+    "user_rank": "Ensign",
+    "user_name": "Wesley",
+    "user_surname": "Crusher",
+    "assistant_name": "Computer",
+    "phonetic_alternatives": [],
+    "calendar_url": "local",
+    "weather_location": "Cape Town",
+    "voice_path": "voices/fedcomp/en_US-fedcomp-medium.onnx",
+    "speaker_id": "0",
+    "personality_file": "personalities/lcars.json",
+    "voice_ack_enabled": false
+}

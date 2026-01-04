@@ -1,0 +1,42 @@
+{
+  "name": "LCARS",
+  "shutdown_phrases": [
+    "Powering down main systems.",
+    "Terminating active processes. Standby.",
+    "Shutting down. Authorization code accepted.",
+    "System shutdown sequence initiated.",
+    "Deactivating primary computer core.",
+    "End of line. Systems offline."
+  ],
+  "restart_phrases": [
+    "Reinitializing system parameters.",
+    "Cycling power to main computer core.",
+    "Restart sequence authorized. Standby.",
+    "Rebooting. Diagnostic checks in progress.",
+    "System restart initiated."
+  ],
+  "acknowledgements": [
+    "Acknowledged.",
+    "Working.",
+    "Processing.",
+    "Unable to comply... just kidding. Executing.",
+    "Command accepted."
+  ],
+  "introductions": [
+    "Library Computer Access and Retrieval System online.",
+    "I am the computer. Awaiting input.",
+    "LCARS interface active. State your command.",
+    "System online. Functionality nominal.",
+    "Computer active. Ready for query."
+  ],
+  "startup_quotes": [
+    "Working.",
+    "Systems online. Awaiting instructions.",
+    "Diagnostic complete. All systems nominal.",
+    "Ready.",
+    "Input required.",
+    "Processing.",
+    "Unable to comply... just kidding. Ready.",
+    "Sensors are operating within normal parameters."
+  ]
+}

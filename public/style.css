@@ -5,6 +5,7 @@
     --lcars-blue: #9999CC;
     --lcars-red: #CC6666;
     --lcars-beige: #FFCC99;
+    --lcars-success: #99CC99;
     --lcars-font: 'Antonio', 'Arial Narrow', sans-serif;
     --gap: 5px;
     --corner-radius: 20px;
@@ -320,4 +321,106 @@ body.theme-nemesis {
     background-color: var(--lcars-purple);
     margin: 5px 0;
     border-radius: 2px;
+}
+
+/* Inputs and Buttons */
+.lcars-input {
+    background-color: var(--lcars-bg);
+    border: 1px solid var(--lcars-blue);
+    color: var(--lcars-orange);
+    padding: 8px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 16px;
+    outline: none;
+}
+
+.lcars-input:focus {
+    border-color: var(--lcars-orange);
+}
+
+.lcars-button {
+    background-color: var(--lcars-blue);
+    color: #000;
+    border: none;
+    padding: 8px 20px;
+    font-family: var(--lcars-font);
+    font-weight: bold;
+    font-size: 18px;
+    border-radius: 15px;
+    cursor: pointer;
+    text-transform: uppercase;
+}
+
+.lcars-button:hover {
+    background-color: var(--lcars-orange);
+}
+
+.lcars-button:active {
+    background-color: var(--lcars-white);
+}
+
+/* Toggle Switch */
+.lcars-toggle {
+    position: relative;
+    display: inline-block;
+    width: 60px;
+    height: 30px;
+}
+
+.lcars-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #333;
+    transition: .4s;
+    border-radius: 30px;
+    border: 1px solid var(--lcars-blue);
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 22px;
+    width: 22px;
+    left: 4px;
+    bottom: 3px;
+    background-color: var(--lcars-blue);
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked + .slider {
+    background-color: var(--lcars-purple);
+}
+
+input:checked + .slider:before {
+    transform: translateX(30px);
+    background-color: #000;
+}
+
+/* List Items */
+.list-item {
+    padding: 10px;
+    border-bottom: 1px solid #333;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+}
+
+.list-item:hover {
+    background-color: #222;
+}
+
+.list-item.active {
+    background-color: var(--lcars-blue);
+    color: #000;
 }
