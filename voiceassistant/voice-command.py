@@ -83,13 +83,28 @@ def speak(text):
         print(f"Error: Piper binary not found at {piper_bin}")
         return
 
+    # Check for speaker ID
+    speaker_id = SETTINGS.get("speaker_id", "0")
+    piper_cmd = [piper_bin, "--model", voice_path, "--output_file", "-"]
+    
+    # Check if model supports speakers
+    voice_config = voice_path + ".json"
+    if os.path.exists(voice_config):
+        try:
+            with open(voice_config, 'r') as f:
+                v_conf = json.load(f)
+                if "speaker_id_map" in v_conf:
+                    piper_cmd.extend(["--speaker", str(speaker_id)])
+        except:
+            pass
+
     try:
         # Echo text
         p1 = subprocess.Popen(["echo", text], stdout=subprocess.PIPE)
         
         # Piper
         p2 = subprocess.Popen(
-            [piper_bin, "--model", voice_path, "--output_file", "-"],
+            piper_cmd,
             stdin=p1.stdout,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL
@@ -184,6 +199,16 @@ except Exception as e:
     stream = p.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=8000)
 
 print(f"Systems Online. Listening on: {device_name}")
+
+# Wait for startup briefing to finish
+lock_file = "/tmp/lcars_briefing.lock"
+wait_count = 0
+while os.path.exists(lock_file) and wait_count < 60: # Wait max 60 seconds
+    time.sleep(1)
+    wait_count += 1
+
+speak("Voice interface initialised")
+print("<<VOICE_ACTIVE>>")
 
 def acknowledge():
     # RELOAD SETTINGS dynamically in case you changed them without restarting

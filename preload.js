@@ -29,5 +29,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getPresets: () => ipcRenderer.invoke('get-presets'),
   readPreset: (filename) => ipcRenderer.invoke('read-preset', filename),
   writePreset: (filename, content) => ipcRenderer.invoke('write-preset', filename, content),
-  deletePreset: (filename) => ipcRenderer.invoke('delete-preset', filename)
+  deletePreset: (filename) => ipcRenderer.invoke('delete-preset', filename),
+  onVoiceOutput: (callback) => ipcRenderer.on('voice-output', (_event, value) => callback(value))
 });

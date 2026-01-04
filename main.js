@@ -213,13 +213,22 @@ function startVoiceAssistant(isAppStart = false) {
 
         // Spawn detached to get a new process group, allowing us to kill the whole tree
         voiceProcess = spawn(VOICE_EXECUTABLE, [], {
-            stdio: ['ignore', 'inherit', 'inherit'],
+            stdio: ['ignore', 'pipe', 'inherit'],
             detached: true,
             env: { 
                 ...process.env, 
                 LCARS_SETTINGS_PATH: USER_SETTINGS_PATH,
                 LCARS_WORKSPACE: LCARS_ROOT
             }
+        });
+        
+        voiceProcess.stdout.on('data', (data) => {
+            const str = data.toString();
+            // Forward to renderer
+            if (mainWindow) {
+                mainWindow.webContents.send('voice-output', str);
+            }
+            process.stdout.write(`[Voice] ${str}`);
         });
         
         voiceProcess.on('error', (err) => {

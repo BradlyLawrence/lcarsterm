@@ -40,6 +40,7 @@ const termTheme = {
 
 // New DOM Elements
 const btnVoice = document.getElementById('btn-voice');
+const voiceActiveIndicator = document.getElementById('voice-active-indicator');
 const btnLogs = document.getElementById('btn-logs');
 const voiceView = document.getElementById('voice-view');
 const logsView = document.getElementById('logs-view');
@@ -190,6 +191,34 @@ function restoreSession() {
 // Functions
 let draggedTabId = null;
 
+// Drag and Drop Logic for Tabs Container
+tabsContainer.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    const afterElement = getDragAfterElement(tabsContainer, e.clientY);
+    const draggable = document.querySelector('.dragging');
+    if (draggable) {
+        if (afterElement == null) {
+            tabsContainer.appendChild(draggable);
+        } else {
+            tabsContainer.insertBefore(draggable, afterElement);
+        }
+    }
+});
+
+function getDragAfterElement(container, y) {
+    const draggableElements = [...container.querySelectorAll('.lcars-tab:not(.dragging)')];
+
+    return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
 function createTerminal(cwdOrEvent, savedTitle, commandToRun) {
     const cwd = (typeof cwdOrEvent === 'string') ? cwdOrEvent : undefined;
     
@@ -220,27 +249,6 @@ function createTerminal(cwdOrEvent, savedTitle, commandToRun) {
             tabElement.classList.remove('dragging');
             draggedTabId = null;
             saveSession();
-        });
-        
-        tabElement.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-        });
-        
-        tabElement.addEventListener('drop', (e) => {
-            e.preventDefault();
-            if (draggedTabId && terminals[draggedTabId]) {
-                const draggedTab = terminals[draggedTabId].tabElement;
-                if (draggedTab !== tabElement) {
-                    const rect = tabElement.getBoundingClientRect();
-                    const mid = rect.left + rect.width / 2;
-                    if (e.clientX < mid) {
-                        tabsContainer.insertBefore(draggedTab, tabElement);
-                    } else {
-                        tabsContainer.insertBefore(draggedTab, tabElement.nextSibling);
-                    }
-                }
-            }
         });
 
         tabElement.onclick = (e) => {
@@ -349,16 +357,28 @@ function switchTab(id) {
     if (settingsView.style.display !== 'none') {
         settingsView.style.display = 'none';
         btnSettings.classList.remove('active');
-        
-        // If we are clicking the already active tab, we just need to reshow it
-        if (activeTermId === id) {
-             if (terminals[id]) {
-                terminals[id].element.style.display = 'block';
-                terminals[id].fitAddon.fit();
-                terminals[id].term.focus();
-             }
-             return;
-        }
+    }
+    
+    // Close Voice View if open
+    if (voiceView && voiceView.style.display !== 'none') {
+        voiceView.style.display = 'none';
+        btnVoice.classList.remove('active');
+    }
+
+    // Close Logs View if open
+    if (logsView && logsView.style.display !== 'none') {
+        logsView.style.display = 'none';
+        btnLogs.classList.remove('active');
+    }
+
+    // If we are clicking the already active tab, we just need to reshow it
+    if (activeTermId === id) {
+         if (terminals[id]) {
+            terminals[id].element.style.display = 'block';
+            terminals[id].fitAddon.fit();
+            terminals[id].term.focus();
+         }
+         return;
     }
 
     if (activeTermId === id) return;
@@ -405,6 +425,17 @@ socket.on('output', ({ id, data }) => {
         terminals[id].term.write(data);
     }
 });
+
+if (window.electronAPI && window.electronAPI.onVoiceOutput) {
+    window.electronAPI.onVoiceOutput((data) => {
+        // Check for voice active signal
+        if (data.includes("<<VOICE_ACTIVE>>")) {
+            if (voiceActiveIndicator) {
+                voiceActiveIndicator.style.display = "inline-block";
+            }
+        }
+    });
+}
 
 socket.on('term-exit', ({ id }) => {
     closeTerminal(id);

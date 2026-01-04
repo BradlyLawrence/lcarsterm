@@ -1,3 +1,15 @@
+# LCARS Terminal v2.1.0
+
+## ✨ New Features
+- **Voice Active Indicator**: A new "VOICE ACTIVE" indicator in the top bar shows when the voice interface is ready and listening.
+- **Initialization Announcement**: The system now audibly confirms "Voice interface initialised" when ready.
+
+## 🐛 Bug Fixes
+- **Voice Settings**: Fixed an issue where the startup briefing would not use the correct speaker ID for multi-speaker voice models.
+- **Audio Overlap**: Fixed an issue where the initialization message would play over the startup briefing. The system now waits for the briefing to complete.
+- **Navigation**: Fixed a bug preventing switching to terminal tabs directly from the Voice or Logs views.
+- **Tab Management**: Improved drag-and-drop functionality for reordering terminal tabs.
+
 # LCARS Terminal v2.0.0
 
 ## 🚀 Major Feature: Offline Voice Assistant
