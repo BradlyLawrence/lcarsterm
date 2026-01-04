@@ -56,6 +56,8 @@ const speakerIdInput = document.getElementById('speaker-id');
 const personalitySelect = document.getElementById('personality');
 const voiceAckToggle = document.getElementById('voice-ack-toggle');
 const startupBriefingToggle = document.getElementById('startup-briefing-toggle');
+const voiceVolumeInput = document.getElementById('voice-volume');
+const voiceVolumeDisplay = document.getElementById('voice-volume-display');
 const btnSaveVoiceSettings = document.getElementById('btn-save-voice-settings');
 
 // Presets Elements
@@ -186,6 +188,8 @@ function restoreSession() {
 }
 
 // Functions
+let draggedTabId = null;
+
 function createTerminal(cwdOrEvent, savedTitle, commandToRun) {
     const cwd = (typeof cwdOrEvent === 'string') ? cwdOrEvent : undefined;
     
@@ -202,6 +206,43 @@ function createTerminal(cwdOrEvent, savedTitle, commandToRun) {
 
         const tabElement = document.createElement('div');
         tabElement.className = 'lcars-block lcars-u-3 lcars-tab';
+        tabElement.dataset.id = id;
+        tabElement.draggable = true;
+
+        // Drag Events
+        tabElement.addEventListener('dragstart', (e) => {
+            draggedTabId = id;
+            e.dataTransfer.effectAllowed = 'move';
+            tabElement.classList.add('dragging');
+        });
+        
+        tabElement.addEventListener('dragend', (e) => {
+            tabElement.classList.remove('dragging');
+            draggedTabId = null;
+            saveSession();
+        });
+        
+        tabElement.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        });
+        
+        tabElement.addEventListener('drop', (e) => {
+            e.preventDefault();
+            if (draggedTabId && terminals[draggedTabId]) {
+                const draggedTab = terminals[draggedTabId].tabElement;
+                if (draggedTab !== tabElement) {
+                    const rect = tabElement.getBoundingClientRect();
+                    const mid = rect.left + rect.width / 2;
+                    if (e.clientX < mid) {
+                        tabsContainer.insertBefore(draggedTab, tabElement);
+                    } else {
+                        tabsContainer.insertBefore(draggedTab, tabElement.nextSibling);
+                    }
+                }
+            }
+        });
+
         tabElement.onclick = (e) => {
             if (!e.target.classList.contains('close-btn') && !e.target.classList.contains('tab-input')) {
                 switchTab(id);
@@ -449,8 +490,14 @@ function setCycleHotkey(hotkey) {
 // Update saveSession to include settings
 const originalSaveSession = saveSession;
 saveSession = function() {
+    // Get terminals in DOM order
+    const orderedTerminals = Array.from(tabsContainer.children).map(tab => {
+        const id = tab.dataset.id;
+        return terminals[id];
+    }).filter(t => t);
+
     const state = {
-        terminals: Object.values(terminals).map(t => ({ 
+        terminals: orderedTerminals.map(t => ({ 
             cwd: t.cwd,
             title: t.title
         })),
@@ -597,6 +644,12 @@ btnNewTerm.addEventListener('click', () => {
     createTerminal();
     switchView('terminals');
 });
+
+if (voiceVolumeInput) {
+    voiceVolumeInput.addEventListener('input', (e) => {
+        if (voiceVolumeDisplay) voiceVolumeDisplay.textContent = e.target.value + '%';
+    });
+}
 
 btnFullscreen.addEventListener('click', () => {
     if (window.electronAPI) {
@@ -771,6 +824,12 @@ async function loadSettings() {
     if (voiceAckToggle) voiceAckToggle.checked = currentSettings.voice_ack_enabled || false;
     if (startupBriefingToggle) startupBriefingToggle.checked = currentSettings.startup_briefing_enabled || false;
     
+    if (voiceVolumeInput) {
+        const vol = currentSettings.voice_volume !== undefined ? currentSettings.voice_volume : 100;
+        voiceVolumeInput.value = vol;
+        if (voiceVolumeDisplay) voiceVolumeDisplay.textContent = vol + '%';
+    }
+
     if (voiceModelSelect) voiceModelSelect.value = currentSettings.voice_path || '';
     if (speakerIdInput) speakerIdInput.value = currentSettings.speaker_id || '0';
     if (personalitySelect) personalitySelect.value = currentSettings.personality_file || '';
@@ -796,6 +855,7 @@ async function saveSettings() {
     currentSettings.phonetic_alternatives = phoneticAlternativesInput.value.split(',').map(s => s.trim()).filter(s => s);
     currentSettings.voice_ack_enabled = voiceAckToggle.checked;
     currentSettings.startup_briefing_enabled = startupBriefingToggle.checked;
+    currentSettings.voice_volume = voiceVolumeInput ? parseInt(voiceVolumeInput.value) : 100;
     
     currentSettings.voice_path = voiceModelSelect.value;
     currentSettings.speaker_id = speakerIdInput.value;

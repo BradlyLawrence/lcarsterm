@@ -7,10 +7,40 @@ import subprocess
 import time
 import random
 import pygame
+import shutil
 from vosk import Model, KaldiRecognizer
 
+def ensure_ffmpeg_in_path():
+    if shutil.which("ffmpeg"):
+        print(f"ffmpeg found at: {shutil.which('ffmpeg')}")
+        return
+
+    print("ffmpeg not found in PATH. Searching common locations...")
+    common_paths = [
+        "/usr/bin",
+        "/usr/local/bin",
+        "/bin",
+        "/snap/bin",
+        os.path.expanduser("~/.local/bin")
+    ]
+    
+    for path in common_paths:
+        ffmpeg_path = os.path.join(path, "ffmpeg")
+        if os.path.exists(ffmpeg_path) and os.access(ffmpeg_path, os.X_OK):
+            print(f"Found ffmpeg at {ffmpeg_path}. Adding to PATH.")
+            os.environ["PATH"] += os.pathsep + path
+            return
+            
+    print("CRITICAL: ffmpeg not found! Transcription will fail.")
+
+ensure_ffmpeg_in_path()
+
 # --- CONFIG ---
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if getattr(sys, 'frozen', False):
+    SCRIPT_DIR = os.path.dirname(sys.executable)
+else:
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 BASE_DIR = SCRIPT_DIR  # Alias for backward compatibility
 USER_DIR = os.environ.get("LCARS_WORKSPACE", SCRIPT_DIR)
 
@@ -32,7 +62,54 @@ def load_json(path):
         return {}
 
 def speak(text):
-    subprocess.run([os.path.join(SCRIPT_DIR, "ai-speak.sh"), text])
+    # Reload settings to get volume
+    current_settings = load_json(SETTINGS_PATH)
+    volume = current_settings.get("voice_volume", 100)
+    vol_factor = float(volume) / 100.0
+
+    voice_path = SETTINGS.get("voice_path", "")
+    if not voice_path:
+        # Fallback
+        voice_path = os.path.join(USER_DIR, "voices/LibriVox/libri.onnx")
+    
+    # Handle relative paths
+    if not os.path.isabs(voice_path):
+        voice_path = os.path.join(USER_DIR, voice_path)
+        
+    piper_bin = os.path.join(SCRIPT_DIR, "piper/piper")
+    
+    # Check if piper exists
+    if not os.path.exists(piper_bin):
+        print(f"Error: Piper binary not found at {piper_bin}")
+        return
+
+    try:
+        # Echo text
+        p1 = subprocess.Popen(["echo", text], stdout=subprocess.PIPE)
+        
+        # Piper
+        p2 = subprocess.Popen(
+            [piper_bin, "--model", voice_path, "--output_file", "-"],
+            stdin=p1.stdout,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL
+        )
+        p1.stdout.close()
+        
+        # FFmpeg Volume Adjustment
+        p3 = subprocess.Popen(
+            ["ffmpeg", "-f", "wav", "-i", "pipe:0", "-filter:a", f"volume={vol_factor}", "-f", "wav", "pipe:1", "-loglevel", "quiet"],
+            stdin=p2.stdout,
+            stdout=subprocess.PIPE
+        )
+        p2.stdout.close()
+
+        # Aplay
+        subprocess.run(["aplay", "-q"], stdin=p3.stdout)
+        p3.stdout.close()
+        
+    except Exception as e:
+        print(f"Error speaking: {e}")
 
 # --- INITIALIZATION ---
 print(f"DEBUG: SETTINGS_PATH = {SETTINGS_PATH}")
@@ -199,14 +276,41 @@ while True:
                     with open("/tmp/current_log_path", "r") as f:
                         wav_path = f.read().strip()
                         final_txt_path = wav_path.replace(".wav", ".txt")
+                    
+                    if not shutil.which("ffmpeg"):
+                        speak("Transcription failed. FFmpeg is not installed.")
+                        print("ERROR: ffmpeg binary not found. Please install ffmpeg.")
+                        continue
+
+                    if not os.path.exists(wav_path):
+                        speak("Log recording failed. Audio file not found.")
+                        print(f"ERROR: Audio file not found at {wav_path}")
+                        continue
+
                     import whisper
-                    model_whisper = whisper.load_model("base") 
+                    # Check for bundled model first
+                    bundled_model_path = os.path.join(BASE_DIR, "whisper-models", "base.pt")
+                    user_model_path = os.path.join(USER_DIR, "whisper-models", "base.pt")
+                    
+                    if os.path.exists(bundled_model_path):
+                        print(f"Loading bundled Whisper model: {bundled_model_path}")
+                        model_whisper = whisper.load_model(bundled_model_path)
+                    elif os.path.exists(user_model_path):
+                        print(f"Loading local Whisper model: {user_model_path}")
+                        model_whisper = whisper.load_model(user_model_path)
+                    else:
+                        print("Local model not found, using default (may download)")
+                        model_whisper = whisper.load_model("base")
+                        
                     result = model_whisper.transcribe(wav_path)
                     with open(final_txt_path, "w") as f:
                         f.write(result["text"].strip())
                     speak("Transcription complete.")
                 except Exception as e:
                     speak("Error during transcription.")
+                    print(f"TRANSCRIPTION ERROR: {e}")
+                    import traceback
+                    traceback.print_exc()
                 continue
 
             elif "resume" in clean_text and "log" in clean_text:
@@ -245,7 +349,22 @@ while True:
             is_paused = False
             play_sfx(RESUME_PATH)
             speak("Captain's log initiated.")
-            subprocess.run([os.path.join(BASE_DIR, "captains-log.sh"), "start"])
+            
+            # Get log directory from settings
+            logs_dir = current_settings.get("logs_dir", "~/Documents/CaptainsLogs")
+            logs_dir = os.path.expanduser(logs_dir)
+            
+            # Ensure directory exists
+            if not os.path.exists(logs_dir):
+                try:
+                    os.makedirs(logs_dir)
+                except Exception as e:
+                    print(f"Error creating log directory: {e}")
+                    speak("Error creating log directory.")
+                    is_logging = False
+                    continue
+            
+            subprocess.run([os.path.join(BASE_DIR, "captains-log.sh"), "start", logs_dir])
             continue
 
         if name_detected and "stop listening" in text:

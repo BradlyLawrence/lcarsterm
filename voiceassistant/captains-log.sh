@@ -1,11 +1,14 @@
 #!/bin/bash
-LOG_DIR="$HOME/Documents/Logs"
+LOG_DIR="${2:-$HOME/Documents/CaptainsLogs}"
 SESSION_DIR="/tmp/galactica_log_session"
 PID_FILE="/tmp/captains_log.pid"
 COUNTER_FILE="$SESSION_DIR/counter"
 
 case $1 in
     start)
+        # Ensure log dir exists
+        mkdir -p "$LOG_DIR"
+
         # 1. Prepare a fresh session folder
         rm -rf "$SESSION_DIR"
         mkdir -p "$SESSION_DIR"
@@ -19,7 +22,7 @@ case $1 in
         echo "$LOG_DIR/log_$TIMESTAMP.wav" > /tmp/current_log_path
         
         # Start ffmpeg
-        ffmpeg -f pulse -i "Galactica_Clean_Voice" -y "$SEGMENT" > /dev/null 2>&1 &
+        ffmpeg -f pulse -i default -y "$SEGMENT" > /dev/null 2>&1 &
         echo $! > "$PID_FILE"
         ;;
         
@@ -42,7 +45,7 @@ case $1 in
         SEGMENT="$SESSION_DIR/segment_${PAD_COUNT}.wav"
         
         # 3. Start NEW recording
-        ffmpeg -f pulse -i "Galactica_Clean_Voice" -y "$SEGMENT" > /dev/null 2>&1 &
+        ffmpeg -f pulse -i default -y "$SEGMENT" > /dev/null 2>&1 &
         echo $! > "$PID_FILE"
         ;;
         

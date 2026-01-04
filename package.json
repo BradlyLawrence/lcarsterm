@@ -6,7 +6,8 @@
   "scripts": {
     "start": "electron .",
     "server": "node server.js",
-    "dist": "electron-builder"
+    "build-voice": "bash build_voice_assistant.sh",
+    "dist": "npm run build-voice && electron-builder"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",
@@ -29,12 +30,20 @@
       "icon": "public/icon.png"
     },
     "asarUnpack": [
-      "voiceassistant/**"
+      "voiceassistant/dist/**"
     ],
     "files": [
       "**/*",
       "!dist/*",
       "!voiceassistant/.venv/*",
+      "!voiceassistant/*.py",
+      "!voiceassistant/*.sh",
+      "!voiceassistant/vosk-model/*",
+      "!voiceassistant/sounds/*",
+      "!voiceassistant/piper/*",
+      "!voiceassistant/voices/*",
+      "!voiceassistant/personalities/*",
+      "!voiceassistant/presets/*",
       "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
       "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
       "!**/node_modules/*.d.ts",

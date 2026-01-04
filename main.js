@@ -106,11 +106,11 @@ const USER_VOICES_DIR = path.join(LCARS_ROOT, 'voices');
 const USER_PERSONALITIES_DIR = path.join(LCARS_ROOT, 'personalities');
 const USER_PRESETS_DIR = path.join(LCARS_ROOT, 'presets');
 
-const BUNDLED_SETTINGS_PATH = getScriptPath('voiceassistant/galactica_settings.json');
-const BUNDLED_COMMANDS_PATH = getScriptPath('voiceassistant/commands.json');
-const BUNDLED_VOICES_DIR = getScriptPath('voiceassistant/voices');
-const BUNDLED_PERSONALITIES_DIR = getScriptPath('voiceassistant/personalities');
-const BUNDLED_PRESETS_DIR = getScriptPath('voiceassistant/presets');
+const BUNDLED_SETTINGS_PATH = getScriptPath('voiceassistant/dist/galactica_settings.json');
+const BUNDLED_COMMANDS_PATH = getScriptPath('voiceassistant/dist/commands.json');
+const BUNDLED_VOICES_DIR = getScriptPath('voiceassistant/dist/voices');
+const BUNDLED_PERSONALITIES_DIR = getScriptPath('voiceassistant/dist/personalities');
+const BUNDLED_PRESETS_DIR = getScriptPath('voiceassistant/dist/presets');
 
 // Helper to copy directory recursively
 function copyDirSync(src, dest) {
@@ -166,23 +166,40 @@ try {
     console.error('Failed to initialize user data:', e);
 }
 
-const LOG_DIR = path.join(os.homedir(), 'Documents/Logs');
-const PYTHON_PATH = path.join(os.homedir(), '.leo/.venv/bin/python');
-const VOICE_SCRIPT = getScriptPath('voiceassistant/voice-command.py');
-const BRIEFING_SCRIPT = getScriptPath('voiceassistant/startup-briefing.sh');
+function getLogDir() {
+    try {
+        if (fs.existsSync(USER_SETTINGS_PATH)) {
+            const settings = JSON.parse(fs.readFileSync(USER_SETTINGS_PATH, 'utf8'));
+            if (settings.logs_dir) {
+                // Expand ~ if present
+                if (settings.logs_dir.startsWith('~/')) {
+                    return path.join(os.homedir(), settings.logs_dir.slice(2));
+                }
+                return settings.logs_dir;
+            }
+        }
+    } catch (e) {
+        console.error('Error reading settings for log dir:', e);
+    }
+    return path.join(os.homedir(), 'Documents/CaptainsLogs');
+}
+
+// const PYTHON_PATH = path.join(os.homedir(), '.leo/.venv/bin/python');
+const VOICE_EXECUTABLE = getScriptPath('voiceassistant/dist/voice-assistant');
+const BRIEFING_EXECUTABLE = getScriptPath('voiceassistant/dist/startup-briefing');
 
 function startVoiceAssistant(isAppStart = false) {
     if (voiceProcess) return;
     
     console.log('Starting Voice Assistant...');
-    if (fs.existsSync(PYTHON_PATH) && fs.existsSync(VOICE_SCRIPT)) {
+    if (fs.existsSync(VOICE_EXECUTABLE)) {
         // Check for startup briefing
         try {
             if (isAppStart && fs.existsSync(USER_SETTINGS_PATH)) {
                 const settings = JSON.parse(fs.readFileSync(USER_SETTINGS_PATH, 'utf8'));
-                if (settings.startup_briefing_enabled && fs.existsSync(BRIEFING_SCRIPT)) {
+                if (settings.startup_briefing_enabled && fs.existsSync(BRIEFING_EXECUTABLE)) {
                     console.log('Running startup briefing...');
-                    const briefingProcess = spawn('/bin/bash', [BRIEFING_SCRIPT], {
+                    const briefingProcess = spawn(BRIEFING_EXECUTABLE, [], {
                         stdio: 'ignore',
                         env: { ...process.env, LCARS_SETTINGS_PATH: USER_SETTINGS_PATH }
                     });
@@ -195,10 +212,14 @@ function startVoiceAssistant(isAppStart = false) {
         }
 
         // Spawn detached to get a new process group, allowing us to kill the whole tree
-        voiceProcess = spawn(PYTHON_PATH, [VOICE_SCRIPT], {
+        voiceProcess = spawn(VOICE_EXECUTABLE, [], {
             stdio: ['ignore', 'inherit', 'inherit'],
             detached: true,
-            env: { ...process.env, LCARS_SETTINGS_PATH: USER_SETTINGS_PATH }
+            env: { 
+                ...process.env, 
+                LCARS_SETTINGS_PATH: USER_SETTINGS_PATH,
+                LCARS_WORKSPACE: LCARS_ROOT
+            }
         });
         
         voiceProcess.on('error', (err) => {
@@ -210,7 +231,7 @@ function startVoiceAssistant(isAppStart = false) {
             voiceProcess = null;
         });
     } else {
-        console.error('Python environment or voice script not found.');
+        console.error('Voice assistant executable not found at:', VOICE_EXECUTABLE);
     }
 }
 
@@ -525,9 +546,10 @@ ipcMain.handle('write-settings', async (event, settings) => {
 
 ipcMain.handle('read-logs', async () => {
     try {
-        if (!fs.existsSync(LOG_DIR)) return [];
+        const logDir = getLogDir();
+        if (!fs.existsSync(logDir)) return [];
         // Return list of log objects { id, display, hasAudio, hasText }
-        const files = fs.readdirSync(LOG_DIR);
+        const files = fs.readdirSync(logDir);
         const logs = {};
         
         files.forEach(f => {
@@ -547,10 +569,11 @@ ipcMain.handle('read-logs', async () => {
 
 ipcMain.handle('read-log', async (event, filename) => {
     try {
+        const logDir = getLogDir();
         // Try .txt first, then .md
-        let filePath = path.join(LOG_DIR, filename + '.txt');
+        let filePath = path.join(logDir, filename + '.txt');
         if (!fs.existsSync(filePath)) {
-            filePath = path.join(LOG_DIR, filename + '.md');
+            filePath = path.join(logDir, filename + '.md');
         }
         
         if (fs.existsSync(filePath)) {
@@ -565,7 +588,8 @@ ipcMain.handle('read-log', async (event, filename) => {
 
 ipcMain.handle('read-log-audio', async (event, filename) => {
     try {
-        const filePath = path.join(LOG_DIR, filename + '.wav');
+        const logDir = getLogDir();
+        const filePath = path.join(logDir, filename + '.wav');
         if (fs.existsSync(filePath)) {
             const buffer = fs.readFileSync(filePath);
             return `data:audio/wav;base64,${buffer.toString('base64')}`;
@@ -579,10 +603,11 @@ ipcMain.handle('read-log-audio', async (event, filename) => {
 
 ipcMain.handle('write-log', async (event, filename, content) => {
     try {
-        if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+        const logDir = getLogDir();
+        if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
         // Ensure extension
         if (!filename.endsWith('.txt')) filename += '.txt';
-        const filePath = path.join(LOG_DIR, filename);
+        const filePath = path.join(logDir, filename);
         fs.writeFileSync(filePath, content);
         return true;
     } catch (e) {
@@ -593,10 +618,11 @@ ipcMain.handle('write-log', async (event, filename, content) => {
 
 ipcMain.handle('delete-log', async (event, filename) => {
     try {
+        const logDir = getLogDir();
         // Delete both txt and wav
-        const txtPath = path.join(LOG_DIR, filename + '.txt');
-        const mdPath = path.join(LOG_DIR, filename + '.md');
-        const wavPath = path.join(LOG_DIR, filename + '.wav');
+        const txtPath = path.join(logDir, filename + '.txt');
+        const mdPath = path.join(logDir, filename + '.md');
+        const wavPath = path.join(logDir, filename + '.wav');
         
         if (fs.existsSync(txtPath)) fs.unlinkSync(txtPath);
         if (fs.existsSync(mdPath)) fs.unlinkSync(mdPath);

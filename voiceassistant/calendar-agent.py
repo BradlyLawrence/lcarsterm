@@ -12,16 +12,54 @@ from icalendar import Calendar
 import recurring_ical_events
 
 # --- CONFIG ---
+if getattr(sys, 'frozen', False):
+    SCRIPT_DIR = os.path.dirname(sys.executable)
+else:
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 SETTINGS_PATH = os.environ.get("LCARS_SETTINGS_PATH", os.path.expanduser("~/.leo/galactica_settings.json"))
 CALENDAR_FILE = os.path.expanduser("~/Documents/calendar.ics")
-SPEAK_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai-speak.sh")
+# SPEAK_SCRIPT = os.path.join(SCRIPT_DIR, "ai-speak.sh")
+
+def load_settings():
+    try:
+        with open(SETTINGS_PATH, 'r') as f:
+            return json.load(f)
+    except:
+        return {}
+
+SETTINGS = load_settings()
+USER_DIR = os.environ.get("LCARS_WORKSPACE", SCRIPT_DIR)
 
 def speak(text):
     """Output to stdout and trigger voice script."""
     print(f"Speaking: {text}")
-    # Don't fail if script doesn't exist
-    if os.path.exists(SPEAK_SCRIPT):
-        subprocess.run([SPEAK_SCRIPT, text])
+    
+    voice_path = SETTINGS.get("voice_path", "")
+    if not voice_path:
+        voice_path = os.path.join(USER_DIR, "voices/LibriVox/libri.onnx")
+    
+    if not os.path.isabs(voice_path):
+        voice_path = os.path.join(USER_DIR, voice_path)
+        
+    piper_bin = os.path.join(SCRIPT_DIR, "piper/piper")
+    
+    if not os.path.exists(piper_bin):
+        return
+
+    try:
+        p1 = subprocess.Popen(["echo", text], stdout=subprocess.PIPE)
+        p2 = subprocess.Popen(
+            [piper_bin, "--model", voice_path, "--output_file", "-"],
+            stdin=p1.stdout,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL
+        )
+        p1.stdout.close()
+        subprocess.run(["aplay", "-q"], stdin=p2.stdout)
+        p2.stdout.close()
+    except:
+        pass
 
 def load_settings():
     try:
