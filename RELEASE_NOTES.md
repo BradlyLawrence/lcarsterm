@@ -4,6 +4,10 @@
 - **Voice Active Indicator**: A new "VOICE ACTIVE" indicator in the top bar shows when the voice interface is ready and listening.
 - **Initialization Announcement**: The system now audibly confirms "Voice interface initialised" when ready.
 
+## 🛠 Improvements
+- **Test Voice**: Added a quick "TEST" action in settings to speak arbitrary text using your current voice configuration.
+- **Volume-Consistent Speech**: Startup briefing and spoken responses now respect the configured voice volume consistently.
+
 ## 🐛 Bug Fixes
 - **Voice Settings**: Fixed an issue where the startup briefing would not use the correct speaker ID for multi-speaker voice models.
 - **Audio Overlap**: Fixed an issue where the initialization message would play over the startup briefing. The system now waits for the briefing to complete.
