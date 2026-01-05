@@ -60,6 +60,8 @@ const startupBriefingToggle = document.getElementById('startup-briefing-toggle')
 const voiceVolumeInput = document.getElementById('voice-volume');
 const voiceVolumeDisplay = document.getElementById('voice-volume-display');
 const btnSaveVoiceSettings = document.getElementById('btn-save-voice-settings');
+const testVoiceInput = document.getElementById('test-voice-text');
+const btnTestVoice = document.getElementById('btn-test-voice');
 
 // Presets Elements
 const voicePresetSelect = document.getElementById('voice-preset');
@@ -190,18 +192,36 @@ function restoreSession() {
 
 // Functions
 let draggedTabId = null;
+let placeholder = null;
 
 // Drag and Drop Logic for Tabs Container
 tabsContainer.addEventListener('dragover', (e) => {
     e.preventDefault();
     const afterElement = getDragAfterElement(tabsContainer, e.clientY);
     const draggable = document.querySelector('.dragging');
+    
     if (draggable) {
-        if (afterElement == null) {
-            tabsContainer.appendChild(draggable);
-        } else {
-            tabsContainer.insertBefore(draggable, afterElement);
+        if (!placeholder) {
+            placeholder = document.createElement('div');
+            placeholder.className = 'lcars-tab-placeholder';
         }
+        
+        if (afterElement == null) {
+            tabsContainer.appendChild(placeholder);
+        } else {
+            tabsContainer.insertBefore(placeholder, afterElement);
+        }
+    }
+});
+
+tabsContainer.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const draggable = document.querySelector('.dragging');
+    if (draggable && placeholder) {
+        tabsContainer.insertBefore(draggable, placeholder);
+        placeholder.remove();
+        placeholder = null;
+        saveSession();
     }
 });
 
@@ -243,11 +263,21 @@ function createTerminal(cwdOrEvent, savedTitle, commandToRun) {
             draggedTabId = id;
             e.dataTransfer.effectAllowed = 'move';
             tabElement.classList.add('dragging');
+            // Create placeholder immediately
+            placeholder = document.createElement('div');
+            placeholder.className = 'lcars-tab-placeholder';
+            tabElement.style.display = 'none'; // Hide original while dragging
+            tabsContainer.insertBefore(placeholder, tabElement.nextSibling);
         });
         
         tabElement.addEventListener('dragend', (e) => {
             tabElement.classList.remove('dragging');
+            tabElement.style.display = 'block'; // Show original
             draggedTabId = null;
+            if (placeholder) {
+                placeholder.remove();
+                placeholder = null;
+            }
             saveSession();
         });
 
@@ -431,9 +461,29 @@ if (window.electronAPI && window.electronAPI.onVoiceOutput) {
         // Check for voice active signal
         if (data.includes("<<VOICE_ACTIVE>>")) {
             if (voiceActiveIndicator) {
-                voiceActiveIndicator.style.display = "inline-block";
+                voiceActiveIndicator.style.display = "block";
             }
         }
+    });
+}
+
+function setVoiceActiveIndicator(isActive) {
+    if (!voiceActiveIndicator) return;
+    voiceActiveIndicator.style.display = isActive ? 'block' : 'none';
+}
+
+// Show indicator when the voice process is running.
+if (window.electronAPI && window.electronAPI.getVoiceStatus) {
+    window.electronAPI.getVoiceStatus().then((isActive) => {
+        setVoiceActiveIndicator(!!isActive);
+    }).catch(() => {
+        // ignore
+    });
+}
+
+if (window.electronAPI && window.electronAPI.onVoiceStatusChanged) {
+    window.electronAPI.onVoiceStatusChanged((isActive) => {
+        setVoiceActiveIndicator(!!isActive);
     });
 }
 
@@ -865,6 +915,24 @@ async function loadSettings() {
     if (speakerIdInput) speakerIdInput.value = currentSettings.speaker_id || '0';
     if (personalitySelect) personalitySelect.value = currentSettings.personality_file || '';
     
+    if (voiceVolumeInput) {
+        voiceVolumeInput.addEventListener('input', () => {
+            if (voiceVolumeDisplay) voiceVolumeDisplay.textContent = voiceVolumeInput.value + '%';
+        });
+        voiceVolumeInput.addEventListener('change', () => {
+            saveSettings();
+        });
+    }
+
+    if (btnTestVoice) {
+        btnTestVoice.addEventListener('click', async () => {
+            const text = testVoiceInput.value || "Voice interface functional.";
+            if (window.electronAPI && window.electronAPI.testVoice) {
+                await window.electronAPI.testVoice(text);
+            }
+        });
+    }
+
     // Toggle buttons
     if (currentSettings.voice_enabled) {
         btnVoice.style.display = 'block';

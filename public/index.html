@@ -16,7 +16,6 @@
             <div class="lcars-elbow-top-left"></div>
             <div class="lcars-bar-horizontal">
                 <span class="lcars-title">TERMINAL ACCESS</span>
-                <span id="voice-active-indicator" style="display: none; margin-left: auto; margin-right: 20px; color: black; background-color: var(--lcars-orange); padding: 2px 10px; font-weight: bold; border-radius: 10px;">VOICE ACTIVE</span>
             </div>
             <div class="lcars-bar-end-right"></div>
         </div>
@@ -89,6 +88,14 @@
                             <div style="margin-bottom: 15px;">
                                 <label style="display: block; margin-bottom: 5px;">VOICE VOLUME: <span id="voice-volume-display">100%</span></label>
                                 <input type="range" id="voice-volume" min="0" max="200" value="100" style="width: 100%; accent-color: var(--lcars-orange);">
+                            </div>
+
+                            <div style="margin-bottom: 15px; border: 1px solid var(--lcars-blue); padding: 10px; border-radius: 10px;">
+                                <label style="display: block; margin-bottom: 5px;">TEST VOICE</label>
+                                <div style="display: flex; gap: 10px;">
+                                    <input type="text" id="test-voice-text" class="lcars-input" placeholder="Enter text to speak..." style="flex: 1;">
+                                    <button id="btn-test-voice" class="lcars-button">TEST</button>
+                                </div>
                             </div>
                             
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
@@ -264,6 +271,7 @@
         <div class="lcars-footer">
             <div class="lcars-bar-horizontal-bottom">
                 <span class="lcars-status">ONLINE</span>
+                <span id="voice-active-indicator" style="display: none; margin-left: auto; margin-right: 20px; color: black; background-color: var(--lcars-orange); padding: 2px 10px; font-weight: bold; border-radius: 10px; align-self: center;">VOICE ACTIVE</span>
             </div>
         </div>
     </div>

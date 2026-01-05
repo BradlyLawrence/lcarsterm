@@ -187,58 +187,105 @@ function getLogDir() {
 // const PYTHON_PATH = path.join(os.homedir(), '.leo/.venv/bin/python');
 const VOICE_EXECUTABLE = getScriptPath('voiceassistant/dist/voice-assistant');
 const BRIEFING_EXECUTABLE = getScriptPath('voiceassistant/dist/startup-briefing');
+const BRIEFING_SCRIPT = getScriptPath('voiceassistant/dist/startup-briefing.sh');
+const SPEAK_EXECUTABLE = (() => {
+    const distSpeak = getScriptPath('voiceassistant/dist/ai-speak.sh');
+    if (fs.existsSync(distSpeak)) return distSpeak;
+    return getScriptPath('voiceassistant/ai-speak.sh');
+})();
+
+function runStartupBriefing() {
+    const env = {
+        ...process.env,
+        LCARS_SETTINGS_PATH: USER_SETTINGS_PATH,
+        LCARS_WORKSPACE: LCARS_ROOT
+    };
+
+    // Prefer the shell wrapper because it routes through ai-speak.sh (volume-consistent).
+    if (fs.existsSync(BRIEFING_SCRIPT)) {
+        return spawn('bash', [BRIEFING_SCRIPT], { stdio: 'ignore', env });
+    }
+    return spawn(BRIEFING_EXECUTABLE, [], { stdio: 'ignore', env });
+}
 
 function startVoiceAssistant(isAppStart = false) {
     if (voiceProcess) return;
     
     console.log('Starting Voice Assistant...');
     if (fs.existsSync(VOICE_EXECUTABLE)) {
-        // Check for startup briefing
+        const spawnVoiceProcess = () => {
+            if (voiceProcess) return;
+
+            // Spawn detached to get a new process group, allowing us to kill the whole tree
+            voiceProcess = spawn(VOICE_EXECUTABLE, [], {
+                stdio: ['ignore', 'pipe', 'inherit'],
+                detached: true,
+                env: {
+                    ...process.env,
+                    LCARS_SETTINGS_PATH: USER_SETTINGS_PATH,
+                    LCARS_WORKSPACE: LCARS_ROOT
+                }
+            });
+
+            if (mainWindow) {
+                mainWindow.webContents.send('voice-status-changed', true);
+            }
+
+            voiceProcess.stdout.on('data', (data) => {
+                const str = data.toString();
+                // Forward to renderer
+                if (mainWindow) {
+                    mainWindow.webContents.send('voice-output', str);
+                }
+                process.stdout.write(`[Voice] ${str}`);
+            });
+
+            voiceProcess.on('error', (err) => {
+                console.error('Failed to start voice assistant:', err);
+            });
+
+            voiceProcess.on('exit', (code, signal) => {
+                console.log(`Voice assistant exited with code ${code} and signal ${signal}`);
+                voiceProcess = null;
+
+                if (mainWindow) {
+                    mainWindow.webContents.send('voice-status-changed', false);
+                }
+            });
+        };
+
+        // On app start, run the startup briefing first (if enabled) to avoid overlapping speech.
+        let didDeferVoiceStart = false;
         try {
             if (isAppStart && fs.existsSync(USER_SETTINGS_PATH)) {
                 const settings = JSON.parse(fs.readFileSync(USER_SETTINGS_PATH, 'utf8'));
-                if (settings.startup_briefing_enabled && fs.existsSync(BRIEFING_EXECUTABLE)) {
+                if (settings.startup_briefing_enabled && (fs.existsSync(BRIEFING_SCRIPT) || fs.existsSync(BRIEFING_EXECUTABLE))) {
+                    didDeferVoiceStart = true;
                     console.log('Running startup briefing...');
-                    const briefingProcess = spawn(BRIEFING_EXECUTABLE, [], {
-                        stdio: 'ignore',
-                        env: { ...process.env, LCARS_SETTINGS_PATH: USER_SETTINGS_PATH }
+                    const briefingProcess = runStartupBriefing();
+
+                    let started = false;
+                    const startOnce = () => {
+                        if (started) return;
+                        started = true;
+                        spawnVoiceProcess();
+                    };
+
+                    briefingProcess.on('error', (err) => {
+                        console.error('Briefing error:', err);
+                        startOnce();
                     });
-                    briefingProcess.on('error', (err) => console.error('Briefing error:', err));
-                    briefingProcess.unref(); // Don't wait for it
+                    briefingProcess.on('exit', () => startOnce());
+                    briefingProcess.unref();
                 }
             }
         } catch (e) {
             console.error('Error checking startup briefing:', e);
         }
 
-        // Spawn detached to get a new process group, allowing us to kill the whole tree
-        voiceProcess = spawn(VOICE_EXECUTABLE, [], {
-            stdio: ['ignore', 'pipe', 'inherit'],
-            detached: true,
-            env: { 
-                ...process.env, 
-                LCARS_SETTINGS_PATH: USER_SETTINGS_PATH,
-                LCARS_WORKSPACE: LCARS_ROOT
-            }
-        });
-        
-        voiceProcess.stdout.on('data', (data) => {
-            const str = data.toString();
-            // Forward to renderer
-            if (mainWindow) {
-                mainWindow.webContents.send('voice-output', str);
-            }
-            process.stdout.write(`[Voice] ${str}`);
-        });
-        
-        voiceProcess.on('error', (err) => {
-            console.error('Failed to start voice assistant:', err);
-        });
-        
-        voiceProcess.on('exit', (code, signal) => {
-            console.log(`Voice assistant exited with code ${code} and signal ${signal}`);
-            voiceProcess = null;
-        });
+        if (!didDeferVoiceStart) {
+            spawnVoiceProcess();
+        }
     } else {
         console.error('Voice assistant executable not found at:', VOICE_EXECUTABLE);
     }
@@ -268,6 +315,10 @@ function stopVoiceAssistant() {
             }
         }
         voiceProcess = null;
+
+        if (mainWindow) {
+            mainWindow.webContents.send('voice-status-changed', false);
+        }
     }
 }
 
@@ -801,6 +852,20 @@ ipcMain.handle('delete-preset', async (event, filename) => {
         console.error('Error deleting preset:', e);
         return false;
     }
+});
+
+ipcMain.handle('test-voice', async (event, text) => {
+    if (fs.existsSync(SPEAK_EXECUTABLE)) {
+        const p = spawn(SPEAK_EXECUTABLE, [text], {
+            env: { 
+                ...process.env, 
+                LCARS_SETTINGS_PATH: USER_SETTINGS_PATH,
+                LCARS_WORKSPACE: LCARS_ROOT
+            }
+        });
+        return true;
+    }
+    return false;
 });
 
 function startServer() {

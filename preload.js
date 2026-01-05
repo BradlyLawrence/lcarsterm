@@ -30,5 +30,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readPreset: (filename) => ipcRenderer.invoke('read-preset', filename),
   writePreset: (filename, content) => ipcRenderer.invoke('write-preset', filename, content),
   deletePreset: (filename) => ipcRenderer.invoke('delete-preset', filename),
-  onVoiceOutput: (callback) => ipcRenderer.on('voice-output', (_event, value) => callback(value))
+  onVoiceOutput: (callback) => ipcRenderer.on('voice-output', (_event, value) => callback(value)),
+  onVoiceStatusChanged: (callback) => ipcRenderer.on('voice-status-changed', (_event, value) => callback(value)),
+  testVoice: (text) => ipcRenderer.invoke('test-voice', text)
 });

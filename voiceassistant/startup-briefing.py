@@ -43,6 +43,12 @@ def speak(text):
 
     # Check for speaker ID
     speaker_id = SETTINGS.get("speaker_id", "0")
+    
+    # Reload settings to get volume
+    current_settings = load_json(SETTINGS_PATH)
+    volume = current_settings.get("voice_volume", 100)
+    vol_factor = float(volume) / 100.0
+    
     piper_cmd = [piper_bin, "--model", voice_path, "--output_file", "-"]
     
     # Check if model supports speakers
@@ -65,8 +71,17 @@ def speak(text):
             stderr=subprocess.DEVNULL
         )
         p1.stdout.close()
-        subprocess.run(["aplay", "-q"], stdin=p2.stdout)
+        
+        # FFmpeg Volume Adjustment
+        p3 = subprocess.Popen(
+            ["ffmpeg", "-f", "wav", "-i", "pipe:0", "-filter:a", f"volume={vol_factor}", "-f", "wav", "pipe:1", "-loglevel", "quiet"],
+            stdin=p2.stdout,
+            stdout=subprocess.PIPE
+        )
         p2.stdout.close()
+
+        subprocess.run(["aplay", "-q"], stdin=p3.stdout)
+        p3.stdout.close()
     except Exception as e:
         print(f"Error speaking: {e}")
 
