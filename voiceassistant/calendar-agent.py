@@ -31,6 +31,17 @@ def load_settings():
 SETTINGS = load_settings()
 USER_DIR = os.environ.get("LCARS_WORKSPACE", SCRIPT_DIR)
 
+# --- LOGGING ---
+LOG_FILE = os.path.join(USER_DIR, "calendar-debug.log")
+def log(msg):
+    try:
+        with open(LOG_FILE, "a") as f:
+            f.write(f"[{datetime.datetime.now()}] {msg}\n")
+    except:
+        pass
+
+log(f"Starting calendar-agent. USER_DIR={USER_DIR}, SETTINGS_PATH={SETTINGS_PATH}")
+
 def speak(text):
     """Output to stdout and trigger voice script."""
     print(f"Speaking: {text}")
@@ -70,8 +81,10 @@ def load_settings():
 
 def fetch_calendar():
     """ Downloads the latest ICS file with cache-busting or copies local file """
+    log("fetch_calendar: start")
     settings = load_settings()
     url = settings.get("calendar_url", "")
+    log(f"fetch_calendar: url={url}")
     
     if not url:
         return False
@@ -89,6 +102,7 @@ def fetch_calendar():
         found_dbs = []
         
         for base in base_paths:
+            log(f"Scanning base: {base}")
             if os.path.exists(base):
                 for root, dirs, files in os.walk(base):
                     if "/trash" in root: continue
@@ -98,7 +112,9 @@ def fetch_calendar():
                         elif file == "cache.db":
                             found_dbs.append(os.path.join(root, file))
         
+        log(f"Found calendars: {len(found_calendars)} ICS, {len(found_dbs)} DBs")
         if not found_calendars and not found_dbs:
+            log("No local calendars found")
             return False
 
         try:
@@ -118,7 +134,9 @@ def fetch_calendar():
                                 if component.name == "VEVENT":
                                     master_cal.add_component(component)
                                     events_found += 1
-                except: continue
+                except Exception as e:
+                    log(f"Error reading ICS {path}: {e}")
+                    continue
 
             # 2. Process Evolution SQLite DBs
             for db_path in found_dbs:
@@ -142,16 +160,21 @@ def fetch_calendar():
                                         events_found += 1
                             except: pass
                     conn.close()
-                except: continue
+                except Exception as e:
+                    log(f"Error reading DB {db_path}: {e}")
+                    continue
 
             if events_found > 0:
                 with open(CALENDAR_FILE, 'wb') as f:
                     f.write(master_cal.to_ical())
+                log(f"Successfully merged {events_found} events to {CALENDAR_FILE}")
                 return True
+            
+            log("No events found in local sources")
             return False
 
         except Exception as e:
-            print(f"Merge error: {e}")
+            log(f"Merge error: {e}")
             return False
 
     # --- Direct File Path ---
@@ -161,6 +184,7 @@ def fetch_calendar():
             with open(path, 'rb') as src, open(CALENDAR_FILE, 'wb') as dst:
                 dst.write(src.read())
             return True
+        log(f"File not found: {path}")
         return False
 
     # --- HTTP Download ---
@@ -172,8 +196,10 @@ def fetch_calendar():
         response.raise_for_status()
         with open(CALENDAR_FILE, 'wb') as f:
             f.write(response.content)
+        log("Downloaded remote calendar successfully")
         return True
-    except:
+    except Exception as e:
+        log(f"Download error: {e}")
         return False
 
 # --- CORE LOGIC ---

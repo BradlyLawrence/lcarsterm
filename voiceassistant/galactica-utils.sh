@@ -41,7 +41,7 @@ elif [ "$ACTION" == "music" ]; then
         # It is NOT running. Launch it.
         "$SCRIPT_DIR/ai-speak.sh" "Launching Spotify. Stand by."
         export DISPLAY=:0
-        spotify &  # (Or 'flatpak run com.spotify.Client &' if you used Flatpak)
+        nohup spotify >/dev/null 2>&1 & disown  # (Or 'flatpak run com.spotify.Client &' if you used Flatpak)
 
         # Wait 5 seconds for it to load, then hit play
         sleep 5
@@ -61,7 +61,7 @@ elif [ "$ACTION" == "playlist_80s" ]; then
     # 1. Ensure Spotify is actually open first
     if ! pgrep -x "spotify" > /dev/null; then
          export DISPLAY=:0
-         spotify &
+         nohup spotify >/dev/null 2>&1 & disown
          sleep 4
     fi
 
@@ -78,7 +78,7 @@ elif [ "$ACTION" == "playlist_focus" ]; then
 
     if ! pgrep -x "spotify" > /dev/null; then
          export DISPLAY=:0
-         spotify &
+         nohup spotify >/dev/null 2>&1 & disown
          sleep 4
     fi
 

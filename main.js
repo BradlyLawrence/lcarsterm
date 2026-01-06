@@ -88,6 +88,31 @@ function saveState(state) {
   }
 }
 
+// Session State Path
+const sessionFile = path.join(app.getPath('userData'), 'session.json');
+
+ipcMain.handle('save-session', async (event, session) => {
+    try {
+        fs.writeFileSync(sessionFile, JSON.stringify(session, null, 2));
+        return { success: true };
+    } catch (e) {
+        console.error('Failed to save session:', e);
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('load-session', async () => {
+    try {
+        if (fs.existsSync(sessionFile)) {
+            return JSON.parse(fs.readFileSync(sessionFile, 'utf8'));
+        }
+        return null;
+    } catch (e) {
+        console.error('Failed to load session:', e);
+        return null;
+    }
+});
+
 function getScriptPath(relativePath) {
     let p = path.join(__dirname, relativePath);
     if (app.isPackaged) {

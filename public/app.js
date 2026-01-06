@@ -158,37 +158,88 @@ const checkCwd = debounce((id) => {
     socket.emit('get-cwd', { id });
 }, 1000);
 
-function saveSession() {
+async function saveSession() {
+    // Get terminals in DOM order
+    const orderedTerminals = Array.from(document.getElementById('tabs-container').children).map(tab => {
+        const id = tab.dataset.id;
+        return terminals[id];
+    }).filter(t => t);
+
     const state = {
-        terminals: Object.values(terminals).map(t => ({ cwd: t.cwd }))
+        terminals: orderedTerminals.map(t => ({ 
+            cwd: t.cwd,
+            title: t.title
+        })),
+        settings: {
+            theme: currentTheme,
+            hotkey: currentHotkey,
+            cycleHotkey: currentCycleHotkey
+        }
     };
-    localStorage.setItem('lcars-terminal-state', JSON.stringify(state));
+    
+    if (window.electronAPI) {
+        await window.electronAPI.saveSession(state);
+    } else {
+        localStorage.setItem('lcars-terminal-state', JSON.stringify(state));
+    }
 }
 
-function restoreSession() {
-    const saved = localStorage.getItem('lcars-terminal-state');
-    if (saved) {
+async function restoreSession() {
+    let state = null;
+    
+    if (window.electronAPI) {
+        state = await window.electronAPI.loadSession();
+    }
+    
+    if (!state) {
+        // Fallback to local storage for migration or dev
+        const saved = localStorage.getItem('lcars-terminal-state');
+        if (saved) {
+             try { state = JSON.parse(saved); } catch(e) {}
+        }
+    }
+
+    if (state) {
         try {
-            const state = JSON.parse(saved);
+            // Restore settings
+            if (state.settings) {
+                if (state.settings.theme) applyTheme(state.settings.theme);
+                if (state.settings.hotkey) setHotkey(state.settings.hotkey);
+                if (state.settings.cycleHotkey) setCycleHotkey(state.settings.cycleHotkey);
+                else setCycleHotkey(currentCycleHotkey);
+            } else {
+                setHotkey(currentHotkey);
+                setCycleHotkey(currentCycleHotkey);
+            }
+
+            // Restore terminals (logic from original)
             if (state.terminals && Array.isArray(state.terminals)) {
-                if (state.terminals.length === 0) createTerminal();
+                if (state.terminals.length === 0) createTerminal(undefined, undefined, undefined, true);
                 state.terminals.forEach(termState => {
-                    createTerminal(termState.cwd);
+                    createTerminal(termState.cwd, termState.title, undefined, true);
                 });
             } else {
+                // Legacy format fallback
                 const count = state.count || 1;
                 for (let i = 0; i < count; i++) {
-                    createTerminal();
+                    createTerminal(undefined, undefined, undefined, true);
                 }
             }
         } catch (e) {
             console.error("Failed to restore session", e);
-            createTerminal();
+            createTerminal(undefined, undefined, undefined, true);
+            setHotkey(currentHotkey);
+            setCycleHotkey(currentCycleHotkey);
         }
     } else {
-        createTerminal();
+        createTerminal(undefined, undefined, undefined, true);
+        setHotkey(currentHotkey);
+        setCycleHotkey(currentCycleHotkey);
     }
-}
+    
+    // Save once after restore to ensure file exists if it didn't
+    setTimeout(() => saveSession(), 2000);
+};
 
 // Functions
 let draggedTabId = null;
@@ -197,32 +248,21 @@ let placeholder = null;
 // Drag and Drop Logic for Tabs Container
 tabsContainer.addEventListener('dragover', (e) => {
     e.preventDefault();
-    const afterElement = getDragAfterElement(tabsContainer, e.clientY);
     const draggable = document.querySelector('.dragging');
+    if (!draggable) return;
+
+    const afterElement = getDragAfterElement(tabsContainer, e.clientY);
     
-    if (draggable) {
-        if (!placeholder) {
-            placeholder = document.createElement('div');
-            placeholder.className = 'lcars-tab-placeholder';
-        }
-        
-        if (afterElement == null) {
-            tabsContainer.appendChild(placeholder);
-        } else {
-            tabsContainer.insertBefore(placeholder, afterElement);
-        }
+    if (afterElement == null) {
+        tabsContainer.appendChild(draggable);
+    } else {
+        tabsContainer.insertBefore(draggable, afterElement);
     }
 });
 
 tabsContainer.addEventListener('drop', (e) => {
     e.preventDefault();
-    const draggable = document.querySelector('.dragging');
-    if (draggable && placeholder) {
-        tabsContainer.insertBefore(draggable, placeholder);
-        placeholder.remove();
-        placeholder = null;
-        saveSession();
-    }
+    saveSession();
 });
 
 function getDragAfterElement(container, y) {
@@ -239,7 +279,7 @@ function getDragAfterElement(container, y) {
     }, { offset: Number.NEGATIVE_INFINITY }).element;
 }
 
-function createTerminal(cwdOrEvent, savedTitle, commandToRun) {
+function createTerminal(cwdOrEvent, savedTitle, commandToRun, skipSave) {
     const cwd = (typeof cwdOrEvent === 'string') ? cwdOrEvent : undefined;
     
     socket.emit('create-terminal', { cwd }, (response) => {
@@ -263,21 +303,11 @@ function createTerminal(cwdOrEvent, savedTitle, commandToRun) {
             draggedTabId = id;
             e.dataTransfer.effectAllowed = 'move';
             tabElement.classList.add('dragging');
-            // Create placeholder immediately
-            placeholder = document.createElement('div');
-            placeholder.className = 'lcars-tab-placeholder';
-            tabElement.style.display = 'none'; // Hide original while dragging
-            tabsContainer.insertBefore(placeholder, tabElement.nextSibling);
         });
         
         tabElement.addEventListener('dragend', (e) => {
             tabElement.classList.remove('dragging');
-            tabElement.style.display = 'block'; // Show original
             draggedTabId = null;
-            if (placeholder) {
-                placeholder.remove();
-                placeholder = null;
-            }
             saveSession();
         });
 
@@ -373,7 +403,7 @@ function createTerminal(cwdOrEvent, savedTitle, commandToRun) {
         setTimeout(() => {
             fitAddon.fit();
             socket.emit('resize', { id, cols: term.cols, rows: term.rows });
-            saveSession();
+            if (!skipSave) saveSession();
             
             if (commandToRun) {
                 socket.emit('input', { id, data: commandToRun + '\n' });
@@ -570,71 +600,22 @@ function setCycleHotkey(hotkey) {
 
 // Update saveSession to include settings
 const originalSaveSession = saveSession;
-saveSession = function() {
-    // Get terminals in DOM order
-    const orderedTerminals = Array.from(tabsContainer.children).map(tab => {
-        const id = tab.dataset.id;
-        return terminals[id];
-    }).filter(t => t);
+// saveSession is already updated above to handle everything, so we can likely remove this override
+// or keep it if we need to merge logic, but the rewrite above was comprehensive.
+// However, the previous code block I replaced was the *initial* definition.
+// Be careful: if I replaced the initial definition, I must check if there's a *redefinition* later on.
 
-    const state = {
-        terminals: orderedTerminals.map(t => ({ 
-            cwd: t.cwd,
-            title: t.title
-        })),
-        settings: {
-            theme: currentTheme,
-            hotkey: currentHotkey,
-            cycleHotkey: currentCycleHotkey
-        }
-    };
-    localStorage.setItem('lcars-terminal-state', JSON.stringify(state));
-};
+// Looking at file content read previously:
+// Lines 575+ had:
+// saveSession = function() { ... }
+// restoreSession = function() { ... }
 
-// Update restoreSession to include settings
-const originalRestoreSession = restoreSession;
-restoreSession = function() {
-    const saved = localStorage.getItem('lcars-terminal-state');
-    if (saved) {
-        try {
-            const state = JSON.parse(saved);
-            
-            // Restore settings
-            if (state.settings) {
-                if (state.settings.theme) applyTheme(state.settings.theme);
-                if (state.settings.hotkey) setHotkey(state.settings.hotkey);
-                if (state.settings.cycleHotkey) setCycleHotkey(state.settings.cycleHotkey);
-                else setCycleHotkey(currentCycleHotkey);
-            } else {
-                setHotkey(currentHotkey);
-                setCycleHotkey(currentCycleHotkey);
-            }
+// So my rewrite of the *initial* definition might be overwritten by these later definitions.
+// I must delete or update these later definitions as well.
 
-            // Restore terminals (logic from original)
-            if (state.terminals && Array.isArray(state.terminals)) {
-                if (state.terminals.length === 0) createTerminal();
-                state.terminals.forEach(termState => {
-                    createTerminal(termState.cwd, termState.title);
-                });
-            } else {
-                // Legacy format fallback
-                const count = state.count || 1;
-                for (let i = 0; i < count; i++) {
-                    createTerminal();
-                }
-            }
-        } catch (e) {
-            console.error("Failed to restore session", e);
-            createTerminal();
-            setHotkey(currentHotkey);
-            setCycleHotkey(currentCycleHotkey);
-        }
-    } else {
-        createTerminal();
-        setHotkey(currentHotkey);
-        setCycleHotkey(currentCycleHotkey);
-    }
-};
+// Update restoreSession - Merged into main definition
+// const originalRestoreSession = restoreSession;
+// restoreSession = function() { ... }
 
 // UI Event Listeners
 if (window.electronAPI) {
