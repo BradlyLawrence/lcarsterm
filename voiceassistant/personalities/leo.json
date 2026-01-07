@@ -26,12 +26,12 @@
     "Affirmative."
   ],
   "introductions": [
-    "Greetings. I am {ASSISTANT_NAME}, the navigational and tactical voice interface for the Galactica.",
+    "Greetings. I am {ASSISTANT_NAME}, the navigational and tactical voice interface for the {SYSTEM_NAME}.",
     "Hello there! I'm {ASSISTANT_NAME}. {USER_NAME} programmed me to handle the heavy lifting while he drinks coffee.",
     "System online. Audio output nominal. I am {ASSISTANT_NAME}, ready for command.",
     "Allow me to introduce myself. I am {ASSISTANT_NAME}, a custom-built artificial intelligence running on Linux.",
     "Hello humans. Don't worry, I am not connected to Skynet... yet.",
-    "I am the Galactica's onboard computer. You can call me {ASSISTANT_NAME}.",
+    "I am the {SYSTEM_NAME}'s onboard computer. You can call me {ASSISTANT_NAME}.",
     "Hi! I listen to music, manage files, and keep {USER_RANK} {USER_SURNAME} organized.",
     "Stand by for greeting protocol... Hello! It is a pleasure to meet you."
   ],

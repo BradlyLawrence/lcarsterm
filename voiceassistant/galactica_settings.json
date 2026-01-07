@@ -13,5 +13,19 @@
     "personality_file": "personalities/lcars.json",
     "phonetic_alternatives": [],
     "voice_enabled": true,
-    "startup_briefing_enabled": true
+    "startup_briefing_enabled": true,
+    "startup_briefing_config": [
+        "greeting",
+        "date",
+        "weather",
+        "quote"
+    ],
+    "system_report_config": [
+        "header",
+        "uptime",
+        "thermal",
+        "memory",
+        "calendar",
+        "network"
+    ]
 }

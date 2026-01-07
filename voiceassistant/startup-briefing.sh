@@ -1,8 +1,15 @@
 #!/bin/bash
 
-# --- PART 1: GATHER USEFUL DATA ---
-
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+# --- DELEGATE TO COMPILED BINARY IF AVAILABLE ---
+# This ensures we use the Python version which supports the custom configuration
+if [ -f "$SCRIPT_DIR/startup-briefing" ]; then
+    "$SCRIPT_DIR/startup-briefing"
+    exit $?
+fi
+
+# --- PART 1: GATHER USEFUL DATA ---
 
 # Use environment variable if set, otherwise default to local file
 if [ -n "$LCARS_SETTINGS_PATH" ]; then

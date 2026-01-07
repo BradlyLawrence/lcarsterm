@@ -73,8 +73,9 @@ elif [ "$ACTION" == "playlist_80s" ]; then
     sleep 2
     playerctl play
 
-elif [ "$ACTION" == "playlist_focus" ]; then
-    "$SCRIPT_DIR/ai-speak.sh" "Engaging focus mode."
+elif [ "$ACTION" == "play_playlist" ]; then
+    URI="$2"
+    "$SCRIPT_DIR/ai-speak.sh" "Loading playlist."
 
     if ! pgrep -x "spotify" > /dev/null; then
          export DISPLAY=:0
@@ -82,57 +83,97 @@ elif [ "$ACTION" == "playlist_focus" ]; then
          sleep 4
     fi
 
-    # REPLACE THE URI BELOW WITH YOURS
-    dbus-send --print-reply --dest=org.mpris.MediaPlayer2.spotify /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.OpenUri string:"spotify:playlist:2xWjjtCVKKxVcxifBWK3dI"
-
-    sleep 2
-    playerctl play
-elif [ "$ACTION" == "audio_video" ]; then
-    "$SCRIPT_DIR/ai-speak.sh" "Disengaging sync. Optimizing for video."
-    # Set default output to real speakers (Zero Latency)
-    pactl set-default-sink alsa_output.pci-0000_09_00.6.analog-stereo
-    
-    # Optional: Force move any playing streams to the speakers immediately
-    # (This grabs Spotify/Firefox if they are currently playing and moves them)
-    pactl list sink-inputs short | cut -f1 | while read stream; do
-        pactl move-sink-input $stream alsa_output.pci-0000_09_00.6.analog-stereo
-    done
-
-elif [ "$ACTION" == "audio_music" ]; then
-    "$SCRIPT_DIR/ai-speak.sh" "Engaging multi-room sync."
-    # Set default output to the Pipe (Synced Delay)
-    pactl set-default-sink Snapcast
-    
-    # Move current streams to the pipe
-    pactl list sink-inputs short | cut -f1 | while read stream; do
-        pactl move-sink-input $stream Snapcast
-    done
+    # Inject the command directly via DBus
+    if [ -n "$URI" ]; then
+        dbus-send --print-reply --dest=org.mpris.MediaPlayer2.spotify /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.OpenUri string:"$URI"
+        sleep 2
+        playerctl play
+    else
+        "$SCRIPT_DIR/ai-speak.sh" "Error. No playlist identifier provided."
+    fi
+     
 elif [ "$ACTION" == "status_report" ]; then
-    # 1. System Stats (Uptime, Temp, RAM, Disk)
-    UPTIME=$(uptime -p | sed 's/up //')
+
+    # Get config
+    CONFIG_ITEMS=$(python3 -c "import json; 
+try:
+    d=json.load(open('$SETTINGS_FILE'))
+    print(' '.join(d.get('system_report_config', ['header', 'uptime', 'thermal', 'memory', 'disk', 'calendar', 'network'])))
+except:
+    print('header uptime thermal memory disk calendar network')
+")
+
+    REPORT=""
+
+    # 1. Header
+    if [[ " $CONFIG_ITEMS " =~ " header " ]]; then
+        SYSTEM_NAME=$(hostname)
+        REPORT="$SYSTEM_NAME Status Report. "
+    fi
+
+    # 2. Time
+    if [[ " $CONFIG_ITEMS " =~ " time " ]]; then
+        NOW=$(date +"%I:%M %p")
+        REPORT="$REPORT The time is $NOW. "
+    fi
+
+    # 3. Date
+    if [[ " $CONFIG_ITEMS " =~ " date " ]]; then
+        TODAY=$(date +"%A, %B %d")
+        REPORT="$REPORT Today is $TODAY. "
+    fi
+
+    # 4. Uptime
+    if [[ " $CONFIG_ITEMS " =~ " uptime " ]]; then
+        UPTIME=$(uptime -p | sed 's/up //')
+        REPORT="$REPORT System uptime is $UPTIME. "
+    fi
     
-    # Get CPU Temp (Targets 'Package id 0' or 'Core 0')
-    TEMP=$(sensors 2>/dev/null | grep -E "Package id 0|Core 0" | head -n 1 | awk '{print $4}' | tr -d '+°C' | cut -d'.' -f1)
-    # Fallback to sysfs if sensors is not installed
-    [ -z "$TEMP" ] && TEMP=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null | sed 's/.\{3\}$//')
-    [ -z "$TEMP" ] && TEMP="unknown"
+    # 5. Thermal
+    if [[ " $CONFIG_ITEMS " =~ " thermal " ]]; then
+        # Get CPU Temp (Targets 'Package id 0' or 'Core 0')
+        TEMP=$(sensors 2>/dev/null | grep -E "Package id 0|Core 0" | head -n 1 | awk '{print $4}' | tr -d '+°C' | cut -d'.' -f1)
+        # Fallback to sysfs if sensors is not installed
+        [ -z "$TEMP" ] && TEMP=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null | sed 's/.\{3\}$//')
+        [ -z "$TEMP" ] && TEMP="unknown"
+        REPORT="$REPORT Thermal core is at $TEMP degrees. "
+    fi
 
-    RAM=$(free | grep Mem | awk '{printf "%.0f", $3/$2 * 100}')
-    DISK=$(df -h / | grep / | awk 'NR==1 || /^\// {print $5}' | tail -n 1 | tr -d '%')
+    # 6. Memory
+    if [[ " $CONFIG_ITEMS " =~ " memory " ]]; then
+        RAM=$(free | grep Mem | awk '{printf "%.0f", $3/$2 * 100}')
+        REPORT="$REPORT Memory usage $RAM percent. "
+    fi
 
-    # 2. Node Count (Queries Snapcast Server)
-    # Counts unique connected host IDs in the server's status JSON
-    NODES=$(echo '{"id":1,"jsonrpc":"2.0","method":"Server.GetStatus"}' | nc -w 1 localhost 1705 | grep -o '"host":' | wc -l)
-    # Subtract 1 to ignore the local client on Galactica itself
-    CLIENTS=$((NODES - 1))
-    [ $CLIENTS -lt 0 ] && CLIENTS=0
+    # 7. Disk
+    if [[ " $CONFIG_ITEMS " =~ " disk " ]]; then
+        DISK=$(df -h / | grep / | awk 'NR==1 || /^\// {print $5}' | tail -n 1 | tr -d '%')
+        REPORT="$REPORT Primary drive is $DISK percent full. "
+    fi
 
-    # 3. Internet Latency (Ping Google DNS)
-    PING=$(ping -c 1 8.8.8.8 | grep 'time=' | awk -F'time=' '{print $2}' | cut -d' ' -f1 | cut -d'.' -f1)
-    if [ -z "$PING" ]; then PING_STATUS="offline"; else PING_STATUS="$PING milliseconds"; fi
+    # 8. Calendar
+    if [[ " $CONFIG_ITEMS " =~ " calendar " ]]; then
+        # Check for binary first, then python script
+        if [ -f "$SCRIPT_DIR/calendar-agent" ]; then
+            CAL_TEXT=$("$SCRIPT_DIR/calendar-agent" report_today)
+        elif [ -f "$SCRIPT_DIR/calendar-agent.py" ]; then
+            CAL_TEXT=$(python3 "$SCRIPT_DIR/calendar-agent.py" report_today)
+        else
+            CAL_TEXT=""
+        fi
+        
+        if [ -n "$CAL_TEXT" ]; then
+            REPORT="$REPORT $CAL_TEXT"
+        fi
+    fi
 
-    # 4. Final Construction
-    REPORT="Galactica Status Report. System uptime is $UPTIME. Thermal core is at $TEMP degrees. Memory usage $RAM percent. Primary drive is $DISK percent full. There are $CLIENTS active nodes in the hive. Network latency is $PING_STATUS."
+    # 9. Network
+    if [[ " $CONFIG_ITEMS " =~ " network " ]]; then
+        # Internet Latency (Ping Google DNS)
+        PING=$(ping -c 1 8.8.8.8 | grep 'time=' | awk -F'time=' '{print $2}' | cut -d' ' -f1 | cut -d'.' -f1)
+        if [ -z "$PING" ]; then PING_STATUS="offline"; else PING_STATUS="$PING milliseconds"; fi
+        REPORT="$REPORT Network latency is $PING_STATUS. "
+    fi
 
     "$SCRIPT_DIR/ai-speak.sh" "$REPORT"
 fi

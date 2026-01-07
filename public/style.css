@@ -85,6 +85,25 @@ body {
     margin-right: var(--gap);
 }
 
+#tabs-container {
+    display: flex;
+    flex-direction: column;
+    min-height: 50px; /* Ensure drop target exists even if empty */
+    position: relative; /* For absolute positioning of indicator */
+}
+
+#drop-indicator {
+    position: absolute;
+    height: 4px;
+    background-color: var(--lcars-orange);
+    width: 100%;
+    left: 0;
+    pointer-events: none;
+    display: none;
+    z-index: 100;
+    box-shadow: 0 0 10px var(--lcars-orange);
+}
+
 .lcars-column {
     display: flex;
     flex-direction: column;
@@ -423,4 +442,16 @@ input:checked + .slider:before {
 .list-item.active {
     background-color: var(--lcars-blue);
     color: #000;
+}
+
+.lcars-tab.dragging {
+    opacity: 1;
+    background-color: rgba(255, 153, 0, 0.1);
+    border: 1px dashed var(--lcars-orange);
+    box-sizing: border-box;
+    pointer-events: none;
+}
+
+.lcars-tab.dragging > * {
+    visibility: hidden;
 }

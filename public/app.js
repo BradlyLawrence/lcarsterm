@@ -60,6 +60,8 @@ const startupBriefingToggle = document.getElementById('startup-briefing-toggle')
 const voiceVolumeInput = document.getElementById('voice-volume');
 const voiceVolumeDisplay = document.getElementById('voice-volume-display');
 const btnSaveVoiceSettings = document.getElementById('btn-save-voice-settings');
+const btnEditBriefing = document.getElementById('btn-edit-briefing');
+const btnEditSysReport = document.getElementById('btn-edit-sys-report');
 const testVoiceInput = document.getElementById('test-voice-text');
 const btnTestVoice = document.getElementById('btn-test-voice');
 
@@ -243,40 +245,202 @@ async function restoreSession() {
 
 // Functions
 let draggedTabId = null;
-let placeholder = null;
+const dropIndicator = document.getElementById('drop-indicator');
+
+// Config Maps
+const startupBriefingItems = {
+    "greeting": "Greeting (Good Morning...)",
+    "date": "Date (Monday, January 1st)",
+    "time": "Current Time",
+    "weather": "Weather Report",
+    "disk": "Disk Usage Percent",
+    "memory": "Memory Usage Percent",
+    "uptime": "System Uptime",
+    "quote": "Personality Quote"
+};
+
+const systemReportItems = {
+    "header": "Report Header",
+    "time": "Current Time",
+    "date": "Current Date",
+    "uptime": "System Uptime",
+    "thermal": "CPU Temperature",
+    "memory": "Memory Usage",
+    "disk": "Disk Usage",
+    "calendar": "Today's Schedule",
+    "network": "Network Latency Check"
+};
+
+// Optional debug logging for tab DnD (enable via: localStorage.setItem('lcars-debug-tab-dnd', '1'))
+const TAB_DND_DEBUG = localStorage.getItem('lcars-debug-tab-dnd') === '1';
+let lastTabDndDebugTs = 0;
+function tabDndDebug(...args) {
+    if (!TAB_DND_DEBUG) return;
+    const now = Date.now();
+    if (now - lastTabDndDebugTs < 150) return;
+    lastTabDndDebugTs = now;
+    console.log('[tab-dnd]', ...args);
+}
+
+// --- Checklist Modal Logic ---
+function showChecklistModal(options) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('checklist-modal');
+        const titleEl = document.getElementById('checklist-title');
+        const containerEl = document.getElementById('checklist-container');
+        const btnSave = document.getElementById('checklist-btn-save');
+        const btnCancel = document.getElementById('checklist-btn-cancel');
+        
+        titleEl.textContent = (options.title || 'CONFIGURE').toUpperCase();
+        containerEl.innerHTML = '';
+        
+        // Populate items
+        const availableItems = options.items || {};
+        const selectedItems = new Set(options.selected || []);
+        
+        // Preserve order of availableItems keys if possible, or just keys
+        Object.keys(availableItems).forEach(key => {
+            const labelText = availableItems[key];
+            const row = document.createElement('div');
+            row.style.display = 'flex';
+            row.style.alignItems = 'center';
+            row.style.gap = '10px';
+            
+            const label = document.createElement('label');
+            label.className = 'lcars-toggle';
+            
+            const input = document.createElement('input');
+            input.type = 'checkbox';
+            input.dataset.key = key;
+            if (selectedItems.has(key)) input.checked = true;
+            
+            const slider = document.createElement('span');
+            slider.className = 'slider';
+            
+            label.appendChild(input);
+            label.appendChild(slider);
+            
+            const span = document.createElement('span');
+            span.textContent = labelText;
+            
+            row.appendChild(label);
+            row.appendChild(span);
+            containerEl.appendChild(row);
+        });
+        
+        modal.style.display = 'flex';
+        
+        const close = (result) => {
+            modal.style.display = 'none';
+            btnSave.onclick = null;
+            btnCancel.onclick = null;
+            resolve(result);
+        };
+        
+        btnSave.onclick = () => {
+            const result = [];
+            containerEl.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                if (cb.checked) result.push(cb.dataset.key);
+            });
+            close(result);
+        };
+        
+        btnCancel.onclick = () => close(null);
+    });
+}
+
 
 // Drag and Drop Logic for Tabs Container
+tabsContainer.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+});
+
 tabsContainer.addEventListener('dragover', (e) => {
     e.preventDefault();
-    const draggable = document.querySelector('.dragging');
-    if (!draggable) return;
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
 
-    const afterElement = getDragAfterElement(tabsContainer, e.clientY);
+    // 1. Find the element we are currently dragging using the global ID
+    if (!draggedTabId) return;
+
+    // 2. Identify target position
+    const draggable = document.querySelector(`.lcars-tab[data-id="${draggedTabId}"]`);
+    const afterElement = getTabDragAfterElement(tabsContainer, e.clientY, draggable);
     
-    if (afterElement == null) {
-        tabsContainer.appendChild(draggable);
+    // 3. Update Indicator Position
+    dropIndicator.style.display = 'block';
+    
+    // Ensure marker is always attached to container
+    if (dropIndicator.parentElement !== tabsContainer) {
+        tabsContainer.appendChild(dropIndicator);
+    }
+    
+    if (afterElement) {
+        // Position at the top edge of the target element
+        dropIndicator.style.top = afterElement.offsetTop + 'px';
     } else {
-        tabsContainer.insertBefore(draggable, afterElement);
+        // Position at the bottom of the last tab
+        const tabs = [...tabsContainer.querySelectorAll('.lcars-tab')].filter(t => t !== draggable);
+        const lastChild = tabs[tabs.length - 1];
+
+        if (lastChild) {
+            dropIndicator.style.top = (lastChild.offsetTop + lastChild.offsetHeight) + 'px';
+        } else {
+            dropIndicator.style.top = '0px';
+        }
+    }
+
+    tabDndDebug('dragover', {
+        clientY: e.clientY,
+        afterId: afterElement?.dataset?.id ?? null,
+        draggedId: draggedTabId
+    });
+});
+
+tabsContainer.addEventListener('dragleave', (e) => {
+    // Only hide if we left the container entirely
+    if (e.relatedTarget && !tabsContainer.contains(e.relatedTarget)) {
+        dropIndicator.style.display = 'none';
     }
 });
 
 tabsContainer.addEventListener('drop', (e) => {
     e.preventDefault();
+    dropIndicator.style.display = 'none';
+    
+    if (!draggedTabId) return;
+    const draggable = document.querySelector(`.lcars-tab[data-id="${draggedTabId}"]`);
+    if (!draggable) return;
+
+    const afterElement = getTabDragAfterElement(tabsContainer, e.clientY, draggable);
+
+    if (afterElement == null) {
+        tabsContainer.appendChild(draggable);
+    } else {
+        tabsContainer.insertBefore(draggable, afterElement);
+    }
+    
     saveSession();
 });
 
-function getDragAfterElement(container, y) {
-    const draggableElements = [...container.querySelectorAll('.lcars-tab:not(.dragging)')];
+function getTabDragAfterElement(container, y, draggingElement) {
+    const draggableElements = [...container.querySelectorAll('.lcars-tab')].filter(d => d !== draggingElement);
+    if (draggableElements.length === 0) return null;
 
-    return draggableElements.reduce((closest, child) => {
-        const box = child.getBoundingClientRect();
-        const offset = y - box.top - box.height / 2;
+    // Convert viewport Y into container-local coordinates.
+    // This avoids any subtle Electron/clientY vs getBoundingClientRect mismatches.
+    const containerRect = container.getBoundingClientRect();
+    const localY = (y - containerRect.top) + container.scrollTop;
+
+    let closest = { offset: Number.NEGATIVE_INFINITY, element: null };
+    for (const child of draggableElements) {
+        const childMid = child.offsetTop + child.offsetHeight / 2;
+        const offset = localY - childMid;
         if (offset < 0 && offset > closest.offset) {
-            return { offset: offset, element: child };
-        } else {
-            return closest;
+            closest = { offset, element: child };
         }
-    }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }
+    return closest.element;
 }
 
 function createTerminal(cwdOrEvent, savedTitle, commandToRun, skipSave) {
@@ -300,13 +464,29 @@ function createTerminal(cwdOrEvent, savedTitle, commandToRun, skipSave) {
 
         // Drag Events
         tabElement.addEventListener('dragstart', (e) => {
+            e.stopPropagation(); 
             draggedTabId = id;
             e.dataTransfer.effectAllowed = 'move';
-            tabElement.classList.add('dragging');
+            e.dataTransfer.setData('text/plain', id); 
+
+            // Ensure the drag image is *only* this tab (Electron/Chromium can otherwise pick a larger region)
+            try {
+                e.dataTransfer.setDragImage(tabElement, Math.floor(tabElement.offsetWidth / 2), Math.floor(tabElement.offsetHeight / 2));
+            } catch (_) {
+                // Some environments may throw; safe to ignore
+            }
+            
+            setTimeout(() => {
+                tabElement.classList.add('dragging');
+                // Make it semi-transparent so we can see the indicator through it
+                tabElement.style.opacity = '0.3';
+            }, 0);
         });
         
         tabElement.addEventListener('dragend', (e) => {
             tabElement.classList.remove('dragging');
+            tabElement.style.opacity = '';
+            dropIndicator.style.display = 'none'; // Ensure indicator is hidden
             draggedTabId = null;
             saveSession();
         });
@@ -321,10 +501,12 @@ function createTerminal(cwdOrEvent, savedTitle, commandToRun, skipSave) {
         const titleSpan = document.createElement('span');
         titleSpan.className = 'tab-title';
         titleSpan.innerText = title;
+        titleSpan.draggable = false;
         
         const closeBtn = document.createElement('span');
         closeBtn.className = 'close-btn';
         closeBtn.innerText = 'X';
+        closeBtn.draggable = false;
         closeBtn.onclick = (e) => {
             e.stopPropagation();
             closeTerminal(id);
@@ -513,7 +695,10 @@ if (window.electronAPI && window.electronAPI.getVoiceStatus) {
 
 if (window.electronAPI && window.electronAPI.onVoiceStatusChanged) {
     window.electronAPI.onVoiceStatusChanged((isActive) => {
-        setVoiceActiveIndicator(!!isActive);
+        // Only hide it immediately on stop. On start, wait for <<VOICE_ACTIVE>> signal.
+        if (!isActive) {
+            setVoiceActiveIndicator(false);
+        }
     });
 }
 
@@ -886,6 +1071,14 @@ async function loadSettings() {
     if (voiceAckToggle) voiceAckToggle.checked = currentSettings.voice_ack_enabled || false;
     if (startupBriefingToggle) startupBriefingToggle.checked = currentSettings.startup_briefing_enabled || false;
     
+    // Ensure config arrays exist so we don't lose defaults if not set in file
+    if (!currentSettings.startup_briefing_config) {
+        currentSettings.startup_briefing_config = ["greeting", "date", "weather", "disk", "quote"];
+    }
+    if (!currentSettings.system_report_config) {
+        currentSettings.system_report_config = ["header", "uptime", "thermal", "memory", "disk", "calendar", "network"];
+    }
+
     if (voiceVolumeInput) {
         const vol = currentSettings.voice_volume !== undefined ? currentSettings.voice_volume : 100;
         voiceVolumeInput.value = vol;
@@ -925,21 +1118,31 @@ async function loadSettings() {
 }
 
 async function saveSettings() {
-    currentSettings.voice_enabled = voiceEnabledToggle.checked;
-    currentSettings.user_rank = userRankInput.value;
-    currentSettings.user_name = userNameInput.value;
-    currentSettings.user_surname = userSurnameInput.value;
-    currentSettings.assistant_name = assistantNameInput.value;
-    currentSettings.calendar_url = calendarUrlInput.value;
-    currentSettings.weather_location = weatherLocationInput.value;
-    currentSettings.phonetic_alternatives = phoneticAlternativesInput.value.split(',').map(s => s.trim()).filter(s => s);
-    currentSettings.voice_ack_enabled = voiceAckToggle.checked;
-    currentSettings.startup_briefing_enabled = startupBriefingToggle.checked;
+    // Defensive checks
+    if (voiceEnabledToggle) currentSettings.voice_enabled = voiceEnabledToggle.checked;
+    if (userRankInput) currentSettings.user_rank = userRankInput.value;
+    if (userNameInput) currentSettings.user_name = userNameInput.value;
+    if (userSurnameInput) currentSettings.user_surname = userSurnameInput.value;
+    if (assistantNameInput) currentSettings.assistant_name = assistantNameInput.value;
+    if (calendarUrlInput) currentSettings.calendar_url = calendarUrlInput.value;
+    if (weatherLocationInput) currentSettings.weather_location = weatherLocationInput.value;
+    if (phoneticAlternativesInput) currentSettings.phonetic_alternatives = phoneticAlternativesInput.value.split(',').map(s => s.trim()).filter(s => s);
+    if (voiceAckToggle) currentSettings.voice_ack_enabled = voiceAckToggle.checked;
+    if (startupBriefingToggle) currentSettings.startup_briefing_enabled = startupBriefingToggle.checked;
+    
     currentSettings.voice_volume = voiceVolumeInput ? parseInt(voiceVolumeInput.value) : 100;
     
-    currentSettings.voice_path = voiceModelSelect.value;
-    currentSettings.speaker_id = speakerIdInput.value;
-    currentSettings.personality_file = personalitySelect.value;
+    currentSettings.voice_path = voiceModelSelect ? voiceModelSelect.value : '';
+    currentSettings.speaker_id = speakerIdInput ? speakerIdInput.value : '0';
+    currentSettings.personality_file = personalitySelect ? personalitySelect.value : '';
+    
+    // Ensure config arrays exist
+    if (!currentSettings.startup_briefing_config) {
+        currentSettings.startup_briefing_config = ["greeting", "date", "weather", "disk", "quote"];
+    }
+    if (!currentSettings.system_report_config) {
+        currentSettings.system_report_config = ["header", "uptime", "thermal", "memory", "disk", "calendar", "network"];
+    }
     
     await window.electronAPI.writeSettings(currentSettings);
     // await window.electronAPI.toggleVoice(currentSettings.voice_enabled); // Removed to prevent double restart
@@ -1048,7 +1251,7 @@ function createCategory(title, id) {
     content.addEventListener('dragover', (e) => {
         e.preventDefault();
         if (draggedItem && draggedItem.classList.contains('command-item')) {
-            const afterElement = getDragAfterElement(content, e.clientY);
+            const afterElement = getCommandDragAfterElement(content, e.clientY);
             if (afterElement == null) {
                 content.appendChild(draggedItem);
             } else {
@@ -1097,7 +1300,7 @@ function createCommandItem(key, value) {
 commandsList.addEventListener('dragover', (e) => {
     e.preventDefault();
     if (draggedItem && draggedItem.classList.contains('command-category')) {
-        const afterElement = getDragAfterElement(commandsList, e.clientY);
+        const afterElement = getCommandDragAfterElement(commandsList, e.clientY);
         if (afterElement == null) {
             commandsList.appendChild(draggedItem);
         } else {
@@ -1106,7 +1309,7 @@ commandsList.addEventListener('dragover', (e) => {
     }
 });
 
-function getDragAfterElement(container, y) {
+function getCommandDragAfterElement(container, y) {
     const draggableElements = [...container.querySelectorAll(':scope > .draggable:not(.dragging)')];
     // Since we didn't add .draggable class, use specific classes
     const selector = container.classList.contains('category-content') ? '.command-item:not(.dragging)' : '.command-category:not(.dragging)';
@@ -1327,6 +1530,41 @@ btnLogs.addEventListener('click', () => switchView('logs'));
 
 // Settings Listeners
 btnSaveVoiceSettings.addEventListener('click', saveSettings);
+
+if (btnEditBriefing) {
+    btnEditBriefing.addEventListener('click', async () => {
+        const currentConfig = currentSettings.startup_briefing_config || ["greeting", "date", "weather", "disk", "quote"];
+        const result = await showChecklistModal({
+            title: "STARTUP BRIEFING CONFIG",
+            items: startupBriefingItems,
+            selected: currentConfig
+        });
+        
+        if (result) {
+            currentSettings.startup_briefing_config = result;
+            // Dont save yet, user must click SAVE VOICE SETTINGS
+            // But visually maybe we should indicate it? 
+            // For now, let's just update the local object.
+            await showLcarsModal({ type: 'alert', title: 'UPDATED', message: 'Configuration updated. Press SAVE VOICE SETTINGS to commit.' });
+        }
+    });
+}
+
+if (btnEditSysReport) {
+    btnEditSysReport.addEventListener('click', async () => {
+        const currentConfig = currentSettings.system_report_config || ["header", "uptime", "thermal", "memory", "disk", "clients", "network"];
+        const result = await showChecklistModal({
+            title: "SYSTEM REPORT CONFIG",
+            items: systemReportItems,
+            selected: currentConfig
+        });
+        
+        if (result) {
+            currentSettings.system_report_config = result;
+            await showLcarsModal({ type: 'alert', title: 'UPDATED', message: 'Configuration updated. Press SAVE VOICE SETTINGS to commit.' });
+        }
+    });
+}
 
 btnAddCommand.addEventListener('click', () => {
     selectedCommandKey = null;

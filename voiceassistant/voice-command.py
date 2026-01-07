@@ -129,6 +129,25 @@ def speak(text):
 # --- INITIALIZATION ---
 print(f"DEBUG: SETTINGS_PATH = {SETTINGS_PATH}")
 COMMANDS = load_json(COMMANDS_PATH)
+
+# --- MIGRATION: Fix old python paths in commands.json ---
+needs_save = False
+for key, cmd in COMMANDS.items():
+    if "{base_dir}/.venv/bin/python {base_dir}/calendar-agent.py" in cmd:
+        COMMANDS[key] = cmd.replace("{base_dir}/.venv/bin/python {base_dir}/calendar-agent.py", "{base_dir}/calendar-agent")
+        needs_save = True
+    elif "{base_dir}/startup-briefing.sh" in cmd:
+        COMMANDS[key] = cmd.replace("{base_dir}/startup-briefing.sh", "{base_dir}/startup-briefing")
+        needs_save = True
+
+if needs_save:
+    try:
+        with open(COMMANDS_PATH, 'w') as f:
+            json.dump(COMMANDS, f, indent=4)
+        print(f"Migrated commands.json at {COMMANDS_PATH} to use new executables.")
+    except Exception as e:
+        print(f"Error saving migrated commands: {e}")
+
 SETTINGS = load_json(SETTINGS_PATH)
 print(f"DEBUG: Loaded Settings: {SETTINGS.keys()}")
 sys.stderr = open(os.devnull, "w")
@@ -207,8 +226,8 @@ while os.path.exists(lock_file) and wait_count < 60: # Wait max 60 seconds
     time.sleep(1)
     wait_count += 1
 
-speak("Voice interface initialised")
 print("<<VOICE_ACTIVE>>")
+speak("Voice interface initialised")
 
 def acknowledge():
     # RELOAD SETTINGS dynamically in case you changed them without restarting

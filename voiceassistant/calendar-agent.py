@@ -7,46 +7,85 @@ import requests
 import subprocess
 import time
 import sqlite3
-from dateutil.relativedelta import relativedelta # Optional but recommended, using standard math if not present
+from dateutil.relativedelta import relativedelta 
 from icalendar import Calendar
 import recurring_ical_events
 
-# --- CONFIG ---
+# --- CONFIG & PATHS ---
 if getattr(sys, 'frozen', False):
+    # Running as AppImage/Binary
     SCRIPT_DIR = os.path.dirname(sys.executable)
 else:
+    # Running as Python Script
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-SETTINGS_PATH = os.environ.get("LCARS_SETTINGS_PATH", os.path.expanduser("~/.leo/galactica_settings.json"))
+def get_config_paths():
+    """Smart resolution of paths with fallbacks."""
+    # 1. Determine Workspace/User Dir
+    user_dir = os.environ.get("LCARS_WORKSPACE")
+    if not user_dir or not os.path.exists(user_dir):
+        # Try standard config location
+        test_dir = os.path.expanduser("~/.config/lcars-terminal")
+        if os.path.exists(test_dir):
+            user_dir = test_dir
+        else:
+            # Fallback to script dir or CWD
+            user_dir = SCRIPT_DIR
+    
+    # 2. Determine Settings Path
+    settings_path = os.environ.get("LCARS_SETTINGS_PATH")
+    if not settings_path or not os.path.exists(settings_path):
+        # Check inside user_dir
+        test_settings = os.path.join(user_dir, "galactica_settings.json")
+        if os.path.exists(test_settings):
+            settings_path = test_settings
+        else:
+            # Legacy fallback
+            settings_path = os.path.expanduser("~/.leo/galactica_settings.json")
+
+    return user_dir, settings_path
+
+USER_DIR, SETTINGS_PATH = get_config_paths()
 CALENDAR_FILE = os.path.expanduser("~/Documents/calendar.ics")
-# SPEAK_SCRIPT = os.path.join(SCRIPT_DIR, "ai-speak.sh")
+LOG_FILE = os.path.join(USER_DIR, "calendar-debug.log")
+
+# --- CORE FUNCTIONS ---
+
+def log(msg):
+    """Simple logging to file."""
+    timestamp = f"[{datetime.datetime.now()}] {msg}"
+    try:
+        with open(LOG_FILE, "a") as f:
+            f.write(f"{timestamp}\n")
+    except Exception as e:
+        print(f"LOG FALLBACK: {timestamp}")
 
 def load_settings():
+    """Load settings from JSON."""
     try:
         with open(SETTINGS_PATH, 'r') as f:
             return json.load(f)
     except:
         return {}
 
+# Load global settings once for static configs (like paths)
 SETTINGS = load_settings()
-USER_DIR = os.environ.get("LCARS_WORKSPACE", SCRIPT_DIR)
-
-# --- LOGGING ---
-LOG_FILE = os.path.join(USER_DIR, "calendar-debug.log")
-def log(msg):
-    try:
-        with open(LOG_FILE, "a") as f:
-            f.write(f"[{datetime.datetime.now()}] {msg}\n")
-    except:
-        pass
-
+# print(f"DEBUG: calendar-agent LOG_FILE={LOG_FILE}")
 log(f"Starting calendar-agent. USER_DIR={USER_DIR}, SETTINGS_PATH={SETTINGS_PATH}")
 
 def speak(text):
     """Output to stdout and trigger voice script."""
+    # Check if we are in report mode (environment variable or similar)
+    if os.environ.get("CALENDAR_REPORT_MODE") == "1":
+        print(text)
+        return
+
     print(f"Speaking: {text}")
     
-    voice_path = SETTINGS.get("voice_path", "")
+    # Reload settings here in case voice path changed
+    current_settings = load_settings()
+    voice_path = current_settings.get("voice_path", "")
+    
     if not voice_path:
         voice_path = os.path.join(USER_DIR, "voices/LibriVox/libri.onnx")
     
@@ -56,12 +95,28 @@ def speak(text):
     piper_bin = os.path.join(SCRIPT_DIR, "piper/piper")
     
     if not os.path.exists(piper_bin):
+        log("Piper binary not found")
         return
+
+    # Check for speaker ID
+    speaker_id = current_settings.get("speaker_id", "0")
+    piper_cmd = [piper_bin, "--model", voice_path, "--output_file", "-"]
+
+    # Check if model supports speakers
+    voice_config = voice_path + ".json"
+    if os.path.exists(voice_config):
+        try:
+            with open(voice_config, 'r') as f:
+                v_conf = json.load(f)
+                if "speaker_id_map" in v_conf:
+                    piper_cmd.extend(["--speaker", str(speaker_id)])
+        except Exception as e:
+            log(f"Error checking voice config: {e}")
 
     try:
         p1 = subprocess.Popen(["echo", text], stdout=subprocess.PIPE)
         p2 = subprocess.Popen(
-            [piper_bin, "--model", voice_path, "--output_file", "-"],
+            piper_cmd,
             stdin=p1.stdout,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL
@@ -69,15 +124,8 @@ def speak(text):
         p1.stdout.close()
         subprocess.run(["aplay", "-q"], stdin=p2.stdout)
         p2.stdout.close()
-    except:
-        pass
-
-def load_settings():
-    try:
-        with open(SETTINGS_PATH, 'r') as f:
-            return json.load(f)
-    except:
-        return {}
+    except Exception as e:
+        log(f"Speak error: {e}")
 
 def fetch_calendar():
     """ Downloads the latest ICS file with cache-busting or copies local file """
@@ -150,15 +198,28 @@ def fetch_calendar():
                     cursor.execute("SELECT ECacheOBJ FROM ECacheObjects")
                     rows = cursor.fetchall()
                     for row in rows:
-                        if row[0]:
+                        raw_data = row[0]
+                        if raw_data:
                             try:
-                                ical_str = f"BEGIN:VCALENDAR\n{row[0]}\nEND:VCALENDAR"
-                                part_cal = Calendar.from_ical(ical_str)
+                                # --- FIX: DECODE BYTES & WRAP ---
+                                if isinstance(raw_data, bytes):
+                                    ical_str_content = raw_data.decode('utf-8')
+                                else:
+                                    ical_str_content = str(raw_data)
+                                
+                                if "BEGIN:VCALENDAR" in ical_str_content:
+                                    final_ical_str = ical_str_content
+                                else:
+                                    final_ical_str = f"BEGIN:VCALENDAR\n{ical_str_content}\nEND:VCALENDAR"
+
+                                part_cal = Calendar.from_ical(final_ical_str)
                                 for component in part_cal.walk():
                                     if component.name == "VEVENT":
                                         master_cal.add_component(component)
                                         events_found += 1
-                            except: pass
+                            except Exception as parsing_err:
+                                log(f"Parsing row error: {parsing_err}")
+                                pass
                     conn.close()
                 except Exception as e:
                     log(f"Error reading DB {db_path}: {e}")
@@ -202,7 +263,7 @@ def fetch_calendar():
         log(f"Download error: {e}")
         return False
 
-# --- CORE LOGIC ---
+# --- LOGIC ---
 
 def get_calendar_object():
     """Loads and returns the parsed calendar object."""
@@ -238,11 +299,9 @@ def mode_daily(target_date, label="Today"):
     cal = get_calendar_object()
     now = datetime.datetime.now().astimezone()
     
-    # Define range for that specific day
     start_range = datetime.datetime.combine(target_date, datetime.time.min).replace(tzinfo=now.tzinfo)
     end_range = datetime.datetime.combine(target_date, datetime.time.max).replace(tzinfo=now.tzinfo)
     
-    # Adjust for "Today" if we are already halfway through it
     if label == "Today":
         start_range = now
 
@@ -282,18 +341,12 @@ def mode_week():
         speak("Your schedule looks completely free for the next 7 days.")
         return
 
-    # Group by day
     days_summary = {}
     for event in events:
         start = event.get('DTSTART').dt
         if isinstance(start, datetime.datetime):
             start = start.astimezone()
-            day_key = start.strftime("%A") # e.g., "Monday"
-        else:
-            # All day event, map to current day check? 
-            # Simplified: Use the date object
-            day_key = start.strftime("%A")
-            
+        day_key = start.strftime("%A")
         days_summary[day_key] = days_summary.get(day_key, 0) + 1
 
     report = "Here is your week. "
@@ -306,12 +359,10 @@ def mode_week():
 def mode_next():
     cal = get_calendar_object()
     now = datetime.datetime.now().astimezone()
-    end_range = now + datetime.timedelta(days=30) # Look ahead 1 month
+    end_range = now + datetime.timedelta(days=30)
     
     events = get_events_range(cal, now, end_range)
     
-    # Filter out all-day events that started previously (they show up as start 00:00)
-    # We want the next *timed* event usually, or the next starting all-day event
     valid_events = []
     for e in events:
         start = e.get('DTSTART').dt
@@ -319,8 +370,6 @@ def mode_next():
             if start > now:
                 valid_events.append(e)
         else:
-            # All day events for tomorrow are valid
-            # Convert date to datetime for comparison
             start_dt = datetime.datetime.combine(start, datetime.time.min).replace(tzinfo=now.tzinfo)
             if start_dt > now:
                 valid_events.append(e)
@@ -337,7 +386,6 @@ def mode_next():
         start = start.astimezone()
         delta = start - now
         
-        # Human readable delta
         hours = delta.seconds // 3600
         minutes = (delta.seconds // 60) % 60
         
@@ -356,7 +404,7 @@ def mode_next():
 def mode_search(query):
     cal = get_calendar_object()
     now = datetime.datetime.now().astimezone()
-    end_range = now + datetime.timedelta(days=90) # Look ahead 3 months
+    end_range = now + datetime.timedelta(days=90)
     
     events = get_events_range(cal, now, end_range)
     matches = []
@@ -372,7 +420,6 @@ def mode_search(query):
         speak(f"I couldn't find any events matching '{query}'.")
         return
 
-    # Limit to first 3 matches to avoid spam
     report = f"I found {len(matches)} matches. "
     for e in matches[:3]:
         summary = e.get('SUMMARY')
@@ -388,7 +435,6 @@ def mode_search(query):
     speak(report)
 
 def mode_weekday_name(day_name):
-    """Calculates the date for a specific day of the week (e.g., 'Friday')."""
     days_map = {
         "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
         "friday": 4, "saturday": 5, "sunday": 6
@@ -402,24 +448,17 @@ def mode_weekday_name(day_name):
     today = datetime.date.today()
     current_idx = today.weekday()
     
-    # Calculate difference
     days_ahead = target_idx - current_idx
-    
-    # If the day has already passed this week (e.g. asking for Monday on a Tuesday),
-    # assume the user means next week.
     if days_ahead < 0:
         days_ahead += 7
         
     target_date = today + datetime.timedelta(days=days_ahead)
     label = target_date.strftime("%A, %B %d")
-    
-    # Reuse the existing daily report function
     mode_daily(target_date, label)
 
 # --- MAIN DISPATCH ---
 
 if __name__ == "__main__":
-    # valid days list
     weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
     if len(sys.argv) < 2:
@@ -431,27 +470,20 @@ if __name__ == "__main__":
 
     if mode == "today":
         mode_daily(today, "Today")
-        
     elif mode == "tomorrow":
         mode_daily(today + datetime.timedelta(days=1), "Tomorrow")
-        
     elif mode in weekdays:
-        # --- NEW: Handle specific weekdays ---
         mode_weekday_name(mode)
-
     elif mode == "week":
         mode_week()
-        
     elif mode == "next":
         mode_next()
-        
     elif mode == "search":
         if len(sys.argv) < 3:
             speak("What should I search for?")
         else:
             query = " ".join(sys.argv[2:])
             mode_search(query)
-            
     elif mode == "date":
         if len(sys.argv) < 3:
             speak("Please provide a date in YYYY-MM-DD format.")
@@ -463,7 +495,9 @@ if __name__ == "__main__":
                 mode_daily(target, label)
             except ValueError:
                 speak("I didn't understand that date format.")
-                
+    elif mode == "report_today":
+        # Special internal mode for system report integration
+        os.environ["CALENDAR_REPORT_MODE"] = "1"
+        mode_daily(today, "Today")
     else:
-        # Fallback
         mode_daily(today, "Today")

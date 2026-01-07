@@ -26,6 +26,7 @@
                 <div class="lcars-column">
                     <div class="lcars-block lcars-u-1" id="btn-new-term">NEW</div>
                     <div id="tabs-container">
+                        <div id="drop-indicator"></div>
                         <!-- Tabs will be injected here -->
                     </div>
                     <div class="lcars-spacer"></div>
@@ -172,6 +173,11 @@
                                 </div>
                             </div>
                             
+                            <div style="margin-top: 15px; display: flex; gap: 10px;">
+                                <button id="btn-edit-briefing" class="lcars-button" style="width: auto;">EDIT BRIEFING</button>
+                                <button id="btn-edit-sys-report" class="lcars-button" style="width: auto;">EDIT SYS REPORT</button>
+                            </div>
+
                             <div style="margin-top: 15px; text-align: right;">
                                 <button id="btn-save-voice-settings" class="lcars-button">SAVE VOICE SETTINGS</button>
                             </div>
@@ -313,6 +319,20 @@
             <div style="display: flex; justify-content: flex-end; gap: 15px;">
                 <button id="modal-btn-cancel" class="lcars-button" style="background-color: var(--lcars-red);">CANCEL</button>
                 <button id="modal-btn-ok" class="lcars-button">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LCARS Checklist Modal -->
+    <div id="checklist-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 2000; align-items: center; justify-content: center;">
+        <div style="background: #000; border: 2px solid var(--lcars-orange); border-radius: 20px; width: 500px; max-width: 90%; padding: 20px; display: flex; flex-direction: column; gap: 20px; box-shadow: 0 0 20px rgba(255, 153, 0, 0.2);">
+            <h3 id="checklist-title" style="color: var(--lcars-orange); margin: 0; border-bottom: 2px solid var(--lcars-purple); padding-bottom: 10px; font-size: 24px;">CONFIGURE ITEMS</h3>
+            <div id="checklist-container" style="color: var(--lcars-blue); font-size: 20px; line-height: 1.4; display: flex; flex-direction: column; gap: 10px; max-height: 400px; overflow-y: auto;">
+                <!-- Checkboxes injected here -->
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 15px;">
+                <button id="checklist-btn-cancel" class="lcars-button" style="background-color: var(--lcars-red);">CANCEL</button>
+                <button id="checklist-btn-save" class="lcars-button">SAVE</button>
             </div>
         </div>
     </div>

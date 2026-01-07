@@ -6,6 +6,7 @@ import random
 import shutil
 import subprocess
 import requests
+import socket
 
 # --- CONFIG ---
 if getattr(sys, 'frozen', False):
@@ -86,6 +87,9 @@ def speak(text):
         print(f"Error speaking: {e}")
 
 def main():
+    # Reload settings on each run
+    SETTINGS.update(load_json(SETTINGS_PATH))
+
     user_rank = SETTINGS.get("user_rank", "Captain")
     user_name = SETTINGS.get("user_name", "Bradly")
     user_surname = SETTINGS.get("user_surname", "User")
@@ -134,6 +138,63 @@ def main():
     chosen_quote = chosen_quote.replace("{USER_RANK}", user_rank)
     chosen_quote = chosen_quote.replace("{USER_SURNAME}", user_surname)
     chosen_quote = chosen_quote.replace("{ASSISTANT_NAME}", assistant_name)
+    chosen_quote = chosen_quote.replace("{SYSTEM_NAME}", socket.gethostname())
+    
+    # --- BUILD BRIEFING ---
+    # Default config if not present
+    default_config = ["greeting", "date", "weather", "disk", "quote"]
+    briefing_config = SETTINGS.get("startup_briefing_config", default_config)
+    
+    full_text = ""
+    
+    for item in briefing_config:
+        if item == "greeting":
+            full_text += f"{greeting}, {user_rank}. "
+        elif item == "date":
+            full_text += f"Today is {date_str}. "
+        elif item == "time":
+            time_str = datetime.datetime.now().strftime("%I:%M %p")
+            full_text += f"The time is {time_str}. "
+        elif item == "weather":
+            if weather:
+                full_text += f"The current weather is {weather}. "
+        elif item == "disk":
+            full_text += f"System disk usage is at {disk_usage}. "
+        elif item == "memory":
+            try:
+                # Try reading /proc/meminfo or use shell command
+                with open('/proc/meminfo', 'r') as f:
+                    meminfo = f.readlines()
+                    total = 0
+                    free = 0
+                    buffers = 0
+                    cached = 0
+                    for line in meminfo:
+                        parts = line.split()
+                        if parts[0] == 'MemTotal:': total = int(parts[1])
+                        if parts[0] == 'MemFree:': free = int(parts[1])
+                        if parts[0] == 'Buffers:': buffers = int(parts[1])
+                        if parts[0] == 'Cached:': cached = int(parts[1])
+                    
+                    used = total - free - buffers - cached
+                    percent = int((used / total) * 100)
+                    full_text += f"Memory usage is at {percent}%. "
+            except:
+                pass
+        elif item == "uptime":
+            try:
+                with open('/proc/uptime', 'r') as f:
+                    uptime_seconds = float(f.readline().split()[0])
+                    # simple parsing
+                    hours = int(uptime_seconds // 3600)
+                    minutes = int((uptime_seconds % 3600) // 60)
+                    full_text += f"System has been up for {hours} hours and {minutes} minutes. "
+            except:
+                pass
+        elif item == "quote":
+            full_text += f"{chosen_quote} "
+            
+    full_text = full_text.strip()
     
     # Create lock file
     lock_file = "/tmp/lcars_briefing.lock"
@@ -144,14 +205,8 @@ def main():
         pass
 
     try:
-        full_text = f"{greeting}, {user_rank}. Today is {date_str}."
-        if weather:
-            full_text += f" The current weather is {weather}."
-        
-        full_text += f" System disk usage is at {disk_usage}."
-        full_text += f" {chosen_quote}"
-        
-        speak(full_text)
+        if full_text:
+            speak(full_text)
     finally:
         if os.path.exists(lock_file):
             try:

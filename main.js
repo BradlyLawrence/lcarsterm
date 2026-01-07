@@ -6,6 +6,7 @@ const { fork, spawn } = require('child_process');
 
 let serverProcess;
 let voiceProcess;
+let isVoiceReady = false;
 let mainWindow;
 let currentHotkey = null;
 let currentCycleHotkey = null;
@@ -243,14 +244,21 @@ function startVoiceAssistant(isAppStart = false) {
 
             // Spawn detached to get a new process group, allowing us to kill the whole tree
             voiceProcess = spawn(VOICE_EXECUTABLE, [], {
-                stdio: ['ignore', 'pipe', 'inherit'],
+                // Pipe both streams so we can forward logs/markers to the renderer.
+                // (Python/pyinstaller stdout can be buffered when piped; force unbuffered via env below.)
+                stdio: ['ignore', 'pipe', 'pipe'],
                 detached: true,
                 env: {
                     ...process.env,
                     LCARS_SETTINGS_PATH: USER_SETTINGS_PATH,
-                    LCARS_WORKSPACE: LCARS_ROOT
+                    LCARS_WORKSPACE: LCARS_ROOT,
+                    // Ensure Python-based voice binary flushes prints promptly so the UI can react to markers.
+                    PYTHONUNBUFFERED: '1',
+                    PYTHONIOENCODING: 'utf-8'
                 }
             });
+
+            isVoiceReady = false;
 
             if (mainWindow) {
                 mainWindow.webContents.send('voice-status-changed', true);
@@ -258,12 +266,26 @@ function startVoiceAssistant(isAppStart = false) {
 
             voiceProcess.stdout.on('data', (data) => {
                 const str = data.toString();
+                if (str.includes("<<VOICE_ACTIVE>>")) {
+                    isVoiceReady = true;
+                }
                 // Forward to renderer
                 if (mainWindow) {
                     mainWindow.webContents.send('voice-output', str);
                 }
                 process.stdout.write(`[Voice] ${str}`);
             });
+
+            if (voiceProcess.stderr) {
+                voiceProcess.stderr.on('data', (data) => {
+                    const str = data.toString();
+                    // Forward to renderer as well (some libs write logs to stderr)
+                    if (mainWindow) {
+                        mainWindow.webContents.send('voice-output', str);
+                    }
+                    process.stderr.write(`[Voice:err] ${str}`);
+                });
+            }
 
             voiceProcess.on('error', (err) => {
                 console.error('Failed to start voice assistant:', err);
@@ -272,6 +294,7 @@ function startVoiceAssistant(isAppStart = false) {
             voiceProcess.on('exit', (code, signal) => {
                 console.log(`Voice assistant exited with code ${code} and signal ${signal}`);
                 voiceProcess = null;
+                isVoiceReady = false;
 
                 if (mainWindow) {
                     mainWindow.webContents.send('voice-status-changed', false);
@@ -730,7 +753,7 @@ ipcMain.handle('toggle-voice', async (event, enabled) => {
 });
 
 ipcMain.handle('get-voice-status', async () => {
-    return !!voiceProcess;
+    return isVoiceReady;
 });
 
 ipcMain.handle('get-voices', async () => {
