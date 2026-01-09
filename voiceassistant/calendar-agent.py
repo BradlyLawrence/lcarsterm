@@ -23,15 +23,19 @@ def get_config_paths():
     """Smart resolution of paths with fallbacks."""
     # 1. Determine Workspace/User Dir
     user_dir = os.environ.get("LCARS_WORKSPACE")
-    if not user_dir or not os.path.exists(user_dir):
-        # Try standard config location
-        test_dir = os.path.expanduser("~/.config/lcars-terminal")
-        if os.path.exists(test_dir):
-            user_dir = test_dir
-        else:
-            # Fallback to script dir or CWD
-            user_dir = SCRIPT_DIR
+    if not user_dir:
+        # Default to standard config location
+        user_dir = os.path.expanduser("~/.config/lcars-terminal")
     
+    # Ensure User Dir exists (Critical for AppImage)
+    if not os.path.exists(user_dir):
+        try:
+            os.makedirs(user_dir, exist_ok=True)
+        except Exception:
+            # Fallback to local hidden dir if .config fails
+            user_dir = os.path.expanduser("~/.lcars-terminal")
+            os.makedirs(user_dir, exist_ok=True)
+
     # 2. Determine Settings Path
     settings_path = os.environ.get("LCARS_SETTINGS_PATH")
     if not settings_path or not os.path.exists(settings_path):
@@ -46,7 +50,8 @@ def get_config_paths():
     return user_dir, settings_path
 
 USER_DIR, SETTINGS_PATH = get_config_paths()
-CALENDAR_FILE = os.path.expanduser("~/Documents/calendar.ics")
+# Use persistent config dir for calendar cache instead of ~/Documents
+CALENDAR_FILE = os.path.join(USER_DIR, "calendar.ics")
 LOG_FILE = os.path.join(USER_DIR, "calendar-debug.log")
 
 # --- CORE FUNCTIONS ---
@@ -87,10 +92,22 @@ def speak(text):
     voice_path = current_settings.get("voice_path", "")
     
     if not voice_path:
-        voice_path = os.path.join(USER_DIR, "voices/LibriVox/libri.onnx")
+        # Default fallback
+        voice_path = "voices/LibriVox/libri.onnx"
     
     if not os.path.isabs(voice_path):
-        voice_path = os.path.join(USER_DIR, voice_path)
+        # 1. Try User/Config Dir (Custom voices)
+        user_voice = os.path.join(USER_DIR, voice_path)
+        # 2. Try Script/Install Dir (Bundled voices)
+        bundled_voice = os.path.join(SCRIPT_DIR, voice_path)
+        
+        if os.path.exists(user_voice):
+            voice_path = user_voice
+        elif os.path.exists(bundled_voice):
+            voice_path = bundled_voice
+        else:
+            # Fallback to user path if neither exists (will likely fail but logs location)
+            voice_path = user_voice
         
     piper_bin = os.path.join(SCRIPT_DIR, "piper/piper")
     
@@ -137,13 +154,22 @@ def fetch_calendar():
     if not url:
         return False
     
-    # --- Local System Calendar Auto-Detection (Evolution/Gnome) ---
+    # --- Local System Calendar Auto-Detection (Evolution/Gnome/Thunderbird/KDE) ---
     if url.lower() == "local":
         base_paths = [
+            # GNOME / Evolution
             os.path.expanduser("~/.local/share/evolution/calendar"),
             os.path.expanduser("~/.cache/evolution/calendar"),
             os.path.expanduser("~/.var/app/org.gnome.Calendar/data/evolution/calendar"),
-            os.path.expanduser("~/.var/app/org.gnome.Calendar/cache/evolution/calendar")
+            os.path.expanduser("~/.var/app/org.gnome.Calendar/cache/evolution/calendar"),
+            # Thunderbird
+            os.path.expanduser("~/.thunderbird"),
+            os.path.expanduser("~/.mozilla/thunderbird"), # Some distros use this
+            # KDE / Akonadi usually difficult, but check standard paths
+            os.path.expanduser("~/.local/share/akonadi"),
+            # Standard / Other
+            os.path.expanduser("~/.calendar"),
+            os.path.expanduser("~/Documents") # Common export location
         ]
         
         found_calendars = []
