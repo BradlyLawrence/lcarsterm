@@ -1,3 +1,24 @@
+# LCARS Terminal v2.2.0
+
+## ✨ New Features
+- **Background Mode**: New "Start Minimized" option allows the terminal to launch silently to the system tray. Use the global hotkey (default F8) to summon it when needed.
+- **System Tray Icon**: Added a tray icon for quick access to show/hide the terminal or quit the application.
+- **Smart Tab Numbering**: Closing a terminal now recycles its number (e.g., closing "TERM 2" makes "TERM 2" available for the next new tab) rather than always incrementing.
+
+## 🛠 Improvements
+- **Refined Configuration UI**: The Settings menu has been completely reorganized for better workflow.
+    - "General Settings" now groups hotkeys, themes, and behavior toggles.
+    - Voice functionality is now managed in a dedicated "Voice System Configuration" section with tabs for "Settings" and "Command Editor".
+    - The sidebar has been decluttered by removing the separate "VOICE" button.
+- **Enhanced Calendar Support**: The calendar agent logic has been significantly improved.
+    - Automatic detection now supports Thunderbird, KDE/Akonadi, and standard `~/.calendar` paths in addition to Gnome/Evolution.
+    - Improved cache handling ensures the calendar works correctly in read-only AppImage environments.
+- **AppImage Compatibility**: Improved resource resolution for voice models and configuration files when running as a portable AppImage.
+
+## 🐛 Bug Fixes
+- **Terminal Focus**: Fixed a regression where switching between Settings/Logs and Terminals could break input focus.
+- **Config Paths**: Fixed issues where the calendar agent would fail to write logs or cache files on systems with restricted permissions.
+
 # LCARS Terminal v2.1.0
 
 ## ✨ New Features

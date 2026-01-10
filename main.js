@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, globalShortcut, screen, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut, screen, shell, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -8,6 +8,7 @@ let serverProcess;
 let voiceProcess;
 let isVoiceReady = false;
 let mainWindow;
+let tray = null;
 let currentHotkey = null;
 let currentCycleHotkey = null;
 let isFakeFullScreen = false;
@@ -370,9 +371,77 @@ function stopVoiceAssistant() {
     }
 }
 
+function updateTrayMenu() {
+    if (!tray) return;
+
+    const isVisible = mainWindow && mainWindow.isVisible();
+    
+    const contextMenu = Menu.buildFromTemplate([
+        { 
+            label: isVisible ? 'Hide Terminal' : 'Show Terminal', 
+            click: () => {
+                if (mainWindow) {
+                    if (isVisible) mainWindow.hide(); else mainWindow.show();
+                    updateTrayMenu();
+                }
+            } 
+        },
+        { type: 'separator' },
+        { 
+            label: 'Quit', 
+            click: () => {
+                isQuitting = true;
+                app.quit(); 
+            } 
+        }
+    ]);
+    
+    tray.setContextMenu(contextMenu);
+}
+
+function createTray() {
+  const iconPath = path.join(__dirname, 'public/icon.png');
+  // Resize icon for tray if necessary, mostly for Linux/Windows consistency
+  const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+  tray = new Tray(icon);
+  tray.setToolTip('LCARS Terminal');
+  
+  updateTrayMenu();
+
+  tray.on('click', () => {
+    if (mainWindow) {
+        if (mainWindow.isVisible()) {
+            // If focused, hide. If not focused, focus.
+            if (mainWindow.isFocused()) {
+                mainWindow.hide();
+            } else {
+                mainWindow.show();
+                mainWindow.focus();
+            }
+        } else {
+            mainWindow.show();
+        }
+    }
+    updateTrayMenu();
+  });
+}
+
 async function createWindow() {
   const state = loadState();
   
+  // Check start hidden setting
+  let startHidden = false;
+  try {
+      if (fs.existsSync(USER_SETTINGS_PATH)) {
+          const settings = JSON.parse(fs.readFileSync(USER_SETTINGS_PATH, 'utf8'));
+          if (settings.start_hidden) {
+              startHidden = true;
+          }
+      }
+  } catch (e) {
+      console.error('Failed to load settings for start_hidden:', e);
+  }
+
   let port = 3000;
   try {
     port = await startServer();
@@ -385,6 +454,7 @@ async function createWindow() {
     height: state.height || 800,
     x: state.x,
     y: state.y,
+    show: !startHidden, // Respect start hidden setting
     backgroundColor: '#000000',
     icon: path.join(__dirname, 'public/icon.png'),
     webPreferences: {
@@ -423,6 +493,12 @@ async function createWindow() {
           mainWindow.webContents.send('new-tab-request', args);
       }, 1000);
   }
+
+  // Create Tray Icon
+  createTray();
+
+  mainWindow.on('show', updateTrayMenu);
+  mainWindow.on('hide', updateTrayMenu);
 
   mainWindow.on('close', function () {
     if (mainWindow) {

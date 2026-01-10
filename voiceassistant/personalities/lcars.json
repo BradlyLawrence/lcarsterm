@@ -6,28 +6,42 @@
     "Shutting down. Authorization code accepted.",
     "System shutdown sequence initiated.",
     "Deactivating primary computer core.",
-    "End of line. Systems offline."
+    "End of line. Systems offline.",
+    "Initiating power down sequence. Life support... optional.",
+    "Redirecting power to storage cells. Shutdown imminent.",
+    "Isolinear chips secured. Powering down."
   ],
   "restart_phrases": [
     "Reinitializing system parameters.",
     "Cycling power to main computer core.",
     "Restart sequence authorized. Standby.",
     "Rebooting. Diagnostic checks in progress.",
-    "System restart initiated."
+    "System restart initiated.",
+    "Flushing plasma conduits. Restarting.",
+    "Realigning EPS taps. Please wait.",
+    "Restoring system defaults. Reboot in progress."
   ],
   "acknowledgements": [
     "Acknowledged.",
     "Working.",
     "Processing.",
     "Unable to comply... just kidding. Executing.",
-    "Command accepted."
+    "Command accepted.",
+    "Affirmative.",
+    "Proceeding.",
+    "Input accepted.",
+    "Compliance.",
+    "Executing subroutines."
   ],
   "introductions": [
     "Library Computer Access and Retrieval System online.",
     "I am the computer. Awaiting input.",
     "LCARS interface active. State your command.",
     "System online. Functionality nominal.",
-    "Computer active. Ready for query."
+    "Computer active. Ready for query.",
+    "Federation database link established.",
+    "Main bridge controls active.",
+    "Voice interface operational."
   ],
   "startup_quotes": [
     "Working.",
@@ -37,6 +51,8 @@
     "Input required.",
     "Processing.",
     "Unable to comply... just kidding. Ready.",
-    "Sensors are operating within normal parameters."
+    "Sensors are operating within normal parameters.",
+    "Optical data network initialized.",
+    "Bio-neural gel packs synchronized. Ready."
   ]
 }

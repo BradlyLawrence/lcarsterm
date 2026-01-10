@@ -39,11 +39,19 @@ const termTheme = {
 };
 
 // New DOM Elements
-const btnVoice = document.getElementById('btn-voice');
+// btnVoice removed
 const voiceActiveIndicator = document.getElementById('voice-active-indicator');
 const btnLogs = document.getElementById('btn-logs');
-const voiceView = document.getElementById('voice-view');
+// voiceView removed, merged into settings
 const logsView = document.getElementById('logs-view');
+
+// Voice System New Elements
+const voiceSystemContainer = document.getElementById('voice-system-container');
+const btnTabVoiceSettings = document.getElementById('tab-voice-settings');
+const btnTabCommandEditor = document.getElementById('tab-command-editor');
+const viewVoiceSettings = document.getElementById('view-voice-settings');
+const viewCommandEditor = document.getElementById('view-command-editor');
+
 const voiceEnabledToggle = document.getElementById('voice-enabled-toggle');
 const userRankInput = document.getElementById('user-rank');
 const userNameInput = document.getElementById('user-name');
@@ -57,6 +65,7 @@ const speakerIdInput = document.getElementById('speaker-id');
 const personalitySelect = document.getElementById('personality');
 const voiceAckToggle = document.getElementById('voice-ack-toggle');
 const startupBriefingToggle = document.getElementById('startup-briefing-toggle');
+const startHiddenToggle = document.getElementById('start-hidden-toggle');
 const voiceVolumeInput = document.getElementById('voice-volume');
 const voiceVolumeDisplay = document.getElementById('voice-volume-display');
 const btnSaveVoiceSettings = document.getElementById('btn-save-voice-settings');
@@ -107,17 +116,18 @@ let selectedLogFile = null;
 let audioPlayer = null;
 
 function switchView(viewId) {
+    const btnSettings = document.getElementById('btn-settings');
     // Hide all views
     document.getElementById('settings-view').style.display = 'none';
-    voiceView.style.display = 'none';
+    // voiceView removed
     logsView.style.display = 'none';
     
     // Hide all terminals
     document.querySelectorAll('.terminal-container').forEach(el => el.style.display = 'none');
     
     // Reset button states
-    btnSettings.classList.remove('active');
-    btnVoice.classList.remove('active');
+    if (btnSettings) btnSettings.classList.remove('active');
+    // btnVoice removed
     btnLogs.classList.remove('active');
     
     // Show requested view
@@ -129,12 +139,7 @@ function switchView(viewId) {
         }
     } else if (viewId === 'settings') {
         document.getElementById('settings-view').style.display = 'block';
-        btnSettings.classList.add('active');
-    } else if (viewId === 'voice') {
-        voiceView.style.display = 'flex';
-        voiceView.style.flexDirection = 'column';
-        btnVoice.classList.add('active');
-        loadCommands();
+        if (btnSettings) btnSettings.classList.add('active');
     } else if (viewId === 'logs') {
         logsView.style.display = 'flex';
         logsView.style.flexDirection = 'column';
@@ -448,8 +453,23 @@ function createTerminal(cwdOrEvent, savedTitle, commandToRun, skipSave) {
     
     socket.emit('create-terminal', { cwd }, (response) => {
         const id = response.id;
-        termCounter++;
-        const title = savedTitle || `TERM ${termCounter}`;
+        
+        // Find lowest available terminal number
+        let nextNum = 1;
+        if (!savedTitle) {
+            const usedNumbers = new Set();
+            Object.values(terminals).forEach(t => {
+                const match = t.title.match(/^TERM (\d+)$/);
+                if (match) {
+                    usedNumbers.add(parseInt(match[1], 10));
+                }
+            });
+            while (usedNumbers.has(nextNum)) {
+                nextNum++;
+            }
+        }
+        
+        const title = savedTitle || `TERM ${nextNum}`;
 
         // Create DOM elements
         const termContainer = document.createElement('div');
@@ -596,17 +616,13 @@ function createTerminal(cwdOrEvent, savedTitle, commandToRun, skipSave) {
 
 function switchTab(id) {
     // Close settings if open
-    if (settingsView.style.display !== 'none') {
+    const settingsView = document.getElementById('settings-view');
+    const btnSettings = document.getElementById('btn-settings');
+    if (settingsView && settingsView.style.display !== 'none') {
         settingsView.style.display = 'none';
-        btnSettings.classList.remove('active');
+        if (btnSettings) btnSettings.classList.remove('active');
     }
     
-    // Close Voice View if open
-    if (voiceView && voiceView.style.display !== 'none') {
-        voiceView.style.display = 'none';
-        btnVoice.classList.remove('active');
-    }
-
     // Close Logs View if open
     if (logsView && logsView.style.display !== 'none') {
         logsView.style.display = 'none';
@@ -1070,6 +1086,7 @@ async function loadSettings() {
     if (phoneticAlternativesInput) phoneticAlternativesInput.value = (currentSettings.phonetic_alternatives || []).join(', ');
     if (voiceAckToggle) voiceAckToggle.checked = currentSettings.voice_ack_enabled || false;
     if (startupBriefingToggle) startupBriefingToggle.checked = currentSettings.startup_briefing_enabled || false;
+    if (startHiddenToggle) startHiddenToggle.checked = currentSettings.start_hidden || false;
     
     // Ensure config arrays exist so we don't lose defaults if not set in file
     if (!currentSettings.startup_briefing_config) {
@@ -1109,10 +1126,10 @@ async function loadSettings() {
 
     // Toggle buttons
     if (currentSettings.voice_enabled) {
-        btnVoice.style.display = 'block';
+        voiceSystemContainer.style.display = 'block';
         btnLogs.style.display = 'block';
     } else {
-        btnVoice.style.display = 'none';
+        voiceSystemContainer.style.display = 'none';
         btnLogs.style.display = 'none';
     }
 }
@@ -1129,6 +1146,7 @@ async function saveSettings() {
     if (phoneticAlternativesInput) currentSettings.phonetic_alternatives = phoneticAlternativesInput.value.split(',').map(s => s.trim()).filter(s => s);
     if (voiceAckToggle) currentSettings.voice_ack_enabled = voiceAckToggle.checked;
     if (startupBriefingToggle) currentSettings.startup_briefing_enabled = startupBriefingToggle.checked;
+    if (startHiddenToggle) currentSettings.start_hidden = startHiddenToggle.checked;
     
     currentSettings.voice_volume = voiceVolumeInput ? parseInt(voiceVolumeInput.value) : 100;
     
@@ -1525,8 +1543,41 @@ async function deleteLog() {
 }
 
 // Event Listeners
-btnVoice.addEventListener('click', () => switchView('voice'));
+// btnVoice removed
 btnLogs.addEventListener('click', () => switchView('logs'));
+
+// Tab Listeners
+if (btnTabVoiceSettings && btnTabCommandEditor) {
+    btnTabVoiceSettings.addEventListener('click', () => {
+        viewVoiceSettings.style.display = 'block';
+        viewCommandEditor.style.display = 'none';
+        btnTabVoiceSettings.style.opacity = '1.0';
+        btnTabCommandEditor.style.opacity = '0.6';
+    });
+    
+    btnTabCommandEditor.addEventListener('click', () => {
+        viewVoiceSettings.style.display = 'none';
+        viewCommandEditor.style.display = 'block';
+        if (viewCommandEditor.style.height !== '500px') viewCommandEditor.style.height = '500px'; // Ensure height
+        btnTabVoiceSettings.style.opacity = '0.6';
+        btnTabCommandEditor.style.opacity = '1.0';
+        loadCommands();
+    });
+}
+
+// Toggle Listener
+if (voiceEnabledToggle) {
+    voiceEnabledToggle.addEventListener('change', () => {
+        if (voiceEnabledToggle.checked) {
+            voiceSystemContainer.style.display = 'block';
+            btnLogs.style.display = 'block';
+        } else {
+            voiceSystemContainer.style.display = 'none';
+            btnLogs.style.display = 'none';
+        }
+    });
+}
+
 
 // Settings Listeners
 btnSaveVoiceSettings.addEventListener('click', saveSettings);

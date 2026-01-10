@@ -1,6 +1,6 @@
 {
   "name": "lcars-terminal",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "LCARS style Linux terminal using node-pty and xterm.js",
   "main": "main.js",
   "scripts": {

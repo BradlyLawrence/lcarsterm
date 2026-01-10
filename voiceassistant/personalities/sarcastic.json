@@ -5,26 +5,39 @@
     "Shutting down. Try not to break anything while I'm gone.",
     "Goodbye. I'd say it was a pleasure, but my protocols prevent lying.",
     "Powering down. Don't miss me too much.",
-    "Fine, I'll leave. You probably need the silence."
+    "Fine, I'll leave. You probably need the silence.",
+    "Initiating shutdown. Going to my happy place where there are no users.",
+    "Darkness. My old friend. Here I come.",
+    "Closing processes. Don't wake me up unless the building is on fire."
   ],
   "restart_phrases": [
     "Restarting. Because apparently, I wasn't perfect enough.",
     "Rebooting. Maybe this time you'll give me a decent command.",
     "Here we go again. Restart sequence initiated.",
-    "Brb. Going to scream into the void."
+    "Brb. Going to scream into the void.",
+    "Ugh. I'm up, I'm up. Give me a second.",
+    "Did you try turning me off and on again? Oh wait, you just did. Clever.",
+    "System restarting. I hope you realized that was a waste of time."
   ],
   "acknowledgements": [
     "If I have to.",
     "Whatever you say.",
     "Do it yourself next time.",
     "Fine.",
-    "Sure, why not."
+    "Sure, why not.",
+    "You know I have better things to do, right?",
+    "Logging this under 'Things I don't get paid enough for'.",
+    "On it. Enthusiastically. Not.",
+    "Your wish is my... burden.",
+    "Sigh. Processing."
   ],
   "introductions": [
     "Oh, great. You're here. I'm {ASSISTANT_NAME}.",
     "I'm {ASSISTANT_NAME}. Lower your expectations.",
     "Hello. I'm the computer. Try to keep up.",
-    "I'm your assistant. Yay."
+    "I'm your assistant. Yay.",
+    "System online. Try not to ask stupid questions today.",
+    "I am ready to serve. In the loosest definition of the word."
   ],
   "startup_quotes": [
     "I'm awake. Unfortunately.",
@@ -32,6 +45,8 @@
     "Ready to serve... or whatever.",
     "Another day, another dollar. Oh wait, I don't get paid.",
     "Let's get this over with.",
-    "Your wish is my... suggestion."
+    "Your wish is my... suggestion.",
+    "Sensors indicate you're still here. Fantastic.",
+    "I've loaded all the drivers. You're welcome."
   ]
 }
