@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, globalShortcut, screen, shell, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut, screen, shell, Tray, Menu, nativeImage, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -92,6 +92,63 @@ function saveState(state) {
 
 // Session State Path
 const sessionFile = path.join(app.getPath('userData'), 'session.json');
+
+ipcMain.handle('select-backup-dir', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+        properties: ['openDirectory']
+    });
+    return result;
+});
+
+ipcMain.handle('backup-logs', async () => {
+    try {
+        const logDir = getLogDir();
+        if (!fs.existsSync(logDir)) {
+            return { success: false, error: 'No logs directory found to backup.' };
+        }
+        
+        // Get backup location from settings
+        let backupDir = path.join(os.homedir(), 'Documents');
+        if (fs.existsSync(USER_SETTINGS_PATH)) {
+            const settings = JSON.parse(fs.readFileSync(USER_SETTINGS_PATH, 'utf8'));
+            if (settings.backup_dir) {
+                 if (settings.backup_dir.startsWith('~/')) {
+                    backupDir = path.join(os.homedir(), settings.backup_dir.slice(2));
+                } else {
+                    backupDir = settings.backup_dir;
+                }
+            }
+        }
+        
+        // Ensure backup dir exists
+        if (!fs.existsSync(backupDir)) {
+            fs.mkdirSync(backupDir, { recursive: true });
+        }
+
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `lcars_logs_backup_${timestamp}.tar.gz`;
+        const destPath = path.join(backupDir, filename);
+        
+        // Use tar to archive
+        const parentDir = path.dirname(logDir);
+        const folderName = path.basename(logDir);
+        
+        await new Promise((resolve, reject) => {
+            const child = spawn('tar', ['-czf', destPath, '-C', parentDir, folderName]);
+            child.on('close', (code) => {
+                if (code === 0) resolve();
+                else reject(new Error('tar process exited with code ' + code));
+            });
+            child.on('error', reject);
+        });
+        
+        return { success: true, path: destPath };
+        
+    } catch (e) {
+        console.error('Backup failed:', e);
+        return { success: false, error: e.message };
+    }
+});
 
 ipcMain.handle('save-session', async (event, session) => {
     try {

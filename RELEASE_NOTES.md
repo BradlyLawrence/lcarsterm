@@ -1,6 +1,7 @@
 # LCARS Terminal v2.2.0
 
 ## ✨ New Features
+- **Captain's Log Backup**: Re-implemented the ability to backup all log entries and audio files to a user-specified location (defaulting to `~/Documents`).
 - **Background Mode**: New "Start Minimized" option allows the terminal to launch silently to the system tray. Use the global hotkey (default F8) to summon it when needed.
 - **System Tray Icon**: Added a tray icon for quick access to show/hide the terminal or quit the application.
 - **Smart Tab Numbering**: Closing a terminal now recycles its number (e.g., closing "TERM 2" makes "TERM 2" available for the next new tab) rather than always incrementing.

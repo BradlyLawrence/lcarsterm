@@ -107,6 +107,9 @@ const btnNewLog = document.getElementById('btn-new-log');
 const btnSaveLog = document.getElementById('btn-save-log');
 const btnDeleteLog = document.getElementById('btn-delete-log');
 const btnPlayLog = document.getElementById('btn-play-log');
+const btnBackupLogs = document.getElementById('btn-backup-logs');
+const backupLocationInput = document.getElementById('backup-location');
+const btnBrowseBackup = document.getElementById('btn-browse-backup');
 
 let currentSettings = {};
 let currentCommands = {};
@@ -1038,6 +1041,33 @@ ctxExit.addEventListener('click', () => {
 });
 
 // --- Voice & Logs Logic ---
+if (btnBrowseBackup) {
+    btnBrowseBackup.addEventListener('click', async () => {
+        if (window.electronAPI && window.electronAPI.selectBackupDir) {
+            const result = await window.electronAPI.selectBackupDir();
+            if (result && !result.canceled && result.filePaths.length > 0) {
+                const path = result.filePaths[0];
+                backupLocationInput.value = path;
+                currentSettings.backup_dir = path;
+                await window.electronAPI.writeSettings(currentSettings);
+                // Also update UI feedback if needed?
+            }
+        }
+    });
+}
+
+if (btnBackupLogs) {
+    btnBackupLogs.addEventListener('click', async () => {
+        if (window.electronAPI && window.electronAPI.backupLogs) {
+            const res = await window.electronAPI.backupLogs();
+            if (res.success) {
+                alert(`Backup created successfully at: ${res.path}`);
+            } else {
+                alert(`Backup failed: ${res.error}`);
+            }
+        }
+    });
+}
 
 async function loadSettings() {
     currentSettings = await window.electronAPI.readSettings();
@@ -1088,6 +1118,11 @@ async function loadSettings() {
     if (startupBriefingToggle) startupBriefingToggle.checked = currentSettings.startup_briefing_enabled || false;
     if (startHiddenToggle) startHiddenToggle.checked = currentSettings.start_hidden || false;
     
+    // Backup settings
+    if (backupLocationInput) {
+        backupLocationInput.value = currentSettings.backup_dir || '~/Documents';
+    }
+
     // Ensure config arrays exist so we don't lose defaults if not set in file
     if (!currentSettings.startup_briefing_config) {
         currentSettings.startup_briefing_config = ["greeting", "date", "weather", "disk", "quote"];

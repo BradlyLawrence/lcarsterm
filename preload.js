@@ -34,6 +34,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onVoiceStatusChanged: (callback) => ipcRenderer.on('voice-status-changed', (_event, value) => callback(value)),
   testVoice: (text) => ipcRenderer.invoke('test-voice', text),
   
+  // Backup API
+  selectBackupDir: () => ipcRenderer.invoke('select-backup-dir'),
+  backupLogs: () => ipcRenderer.invoke('backup-logs'),
+
   // Session API
   saveSession: (state) => ipcRenderer.invoke('save-session', state),
   loadSession: () => ipcRenderer.invoke('load-session')
