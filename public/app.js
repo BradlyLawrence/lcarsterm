@@ -68,6 +68,7 @@ const startupBriefingToggle = document.getElementById('startup-briefing-toggle')
 const startHiddenToggle = document.getElementById('start-hidden-toggle');
 const voiceVolumeInput = document.getElementById('voice-volume');
 const voiceVolumeDisplay = document.getElementById('voice-volume-display');
+const preferredMusicPlayerInput = document.getElementById('preferred-music-player');
 const btnSaveVoiceSettings = document.getElementById('btn-save-voice-settings');
 const btnEditBriefing = document.getElementById('btn-edit-briefing');
 const btnEditSysReport = document.getElementById('btn-edit-sys-report');
@@ -1069,6 +1070,16 @@ if (btnBackupLogs) {
     });
 }
 
+// App Shutdown Listener
+if (window.electronAPI && window.electronAPI.onAppShutdown) {
+    window.electronAPI.onAppShutdown(() => {
+        const shutdownModal = document.getElementById('shutdown-modal');
+        if (shutdownModal) {
+            shutdownModal.style.display = 'flex';
+        }
+    });
+}
+
 async function loadSettings() {
     currentSettings = await window.electronAPI.readSettings();
     
@@ -1137,6 +1148,8 @@ async function loadSettings() {
         if (voiceVolumeDisplay) voiceVolumeDisplay.textContent = vol + '%';
     }
 
+    if (preferredMusicPlayerInput) preferredMusicPlayerInput.value = currentSettings.preferred_music_player || 'spotify';
+
     if (voiceModelSelect) voiceModelSelect.value = currentSettings.voice_path || '';
     if (speakerIdInput) speakerIdInput.value = currentSettings.speaker_id || '0';
     if (personalitySelect) personalitySelect.value = currentSettings.personality_file || '';
@@ -1184,6 +1197,7 @@ async function saveSettings() {
     if (startHiddenToggle) currentSettings.start_hidden = startHiddenToggle.checked;
     
     currentSettings.voice_volume = voiceVolumeInput ? parseInt(voiceVolumeInput.value) : 100;
+    currentSettings.preferred_music_player = preferredMusicPlayerInput ? preferredMusicPlayerInput.value : 'spotify';
     
     currentSettings.voice_path = voiceModelSelect ? voiceModelSelect.value : '';
     currentSettings.speaker_id = speakerIdInput ? speakerIdInput.value : '0';

@@ -71,11 +71,14 @@ elif [ "$ACTION" == "playlist_80s" ]; then
 
     # 3. Force Play
     sleep 2
-    playerctl play
+    playerctl -p spotify play
 
 elif [ "$ACTION" == "play_playlist" ]; then
     URI="$2"
     "$SCRIPT_DIR/ai-speak.sh" "Loading playlist."
+
+    # 0. Pause everything else first
+    playerctl -a pause || true
 
     if ! pgrep -x "spotify" > /dev/null; then
          export DISPLAY=:0
@@ -87,7 +90,7 @@ elif [ "$ACTION" == "play_playlist" ]; then
     if [ -n "$URI" ]; then
         dbus-send --print-reply --dest=org.mpris.MediaPlayer2.spotify /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.OpenUri string:"$URI"
         sleep 2
-        playerctl play
+        playerctl -p spotify play
     else
         "$SCRIPT_DIR/ai-speak.sh" "Error. No playlist identifier provided."
     fi

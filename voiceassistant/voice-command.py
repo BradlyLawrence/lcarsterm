@@ -280,6 +280,7 @@ def acknowledge():
 # --- MAIN LOOP ---
 is_logging = False
 is_paused = False
+paused_players = []
 log_text_file = None
 last_trigger_time = 0
 
@@ -374,6 +375,118 @@ while True:
                 continue
             else:
                 continue 
+
+        # --- BRANCH 1.5: MUSIC CONTROL ---
+        # Load settings for dynamic name (needed for name detection)
+        # We assume local load checks are fast enough
+        m_settings = load_json(SETTINGS_PATH)
+        m_name = (m_settings.get("assistant_name") or "Leo").lower()
+        m_alts = [x.lower() for x in m_settings.get("phonetic_alternatives", [])]
+        m_valid_names = [m_name] + m_alts
+        
+        # Check if ANY valid name is in the text
+        if any(name in text for name in m_valid_names):
+            clean_text = text
+            
+            # PAUSE
+            if "pause" in clean_text and ("music" in clean_text or "audio" in clean_text or "media" in clean_text or "playback" in clean_text):
+                last_trigger_time = time.time()
+                acknowledge()
+                
+                try:
+                    if shutil.which("playerctl"):
+                        players_output = subprocess.check_output(["playerctl", "-l"], text=True).strip().split('\n')
+                        currently_playing = []
+                        for p in players_output:
+                            if not p: continue
+                            try:
+                                status = subprocess.check_output(["playerctl", "-p", p, "status"], text=True).strip()
+                                if status == "Playing":
+                                    currently_playing.append(p)
+                                    subprocess.run(["playerctl", "-p", p, "pause"])
+                            except: pass
+                        
+                        if currently_playing:
+                            paused_players = currently_playing
+                            print(f"Paused specific players: {paused_players}")
+                        else:
+                            subprocess.run(["playerctl", "-a", "pause"])
+                except Exception as e:
+                    print(f"Playerctl error: {e}")
+                
+                continue
+
+            # RESUME / PLAY
+            if ("play" in clean_text or "resume" in clean_text) and ("music" in clean_text or "audio" in clean_text or "playback" in clean_text or "spotify" in clean_text):
+                # EXCLUSIONS for specific playlist commands in commands.json
+                is_specific = "focus" in clean_text or "concentration" in clean_text or "nostalgic" in clean_text or "retro" in clean_text
+                
+                if not is_specific:
+                    last_trigger_time = time.time()
+                    acknowledge()
+                    
+                    try:
+                        if shutil.which("playerctl"):
+                            # Strategy 1: Resume remembered
+                            if paused_players:
+                                print(f"Resuming remembered players: {paused_players}")
+                                for p in paused_players:
+                                    subprocess.run(["playerctl", "-p", p, "play"])
+                                paused_players = []
+                            else:
+                                # Strategy 2: Preferred
+                                pref = m_settings.get("preferred_music_player", "spotify").lower().replace(" ", "")
+                                
+                                # Check if preferred player is running
+                                current_players = subprocess.check_output(["playerctl", "-l"], text=True).lower().split('\n')
+                                
+                                if any(pref in p for p in current_players if p):
+                                    print(f"Playing preferred (already running): {pref}")
+                                    subprocess.run(["playerctl", "-p", pref, "play"])
+                                else:
+                                    print(f"Preferred player {pref} not running. Attempting to launch...")
+                                    speak(f"Launching {pref}. Stand by.")
+                                    # Try to launch it
+                                    try:
+                                        subprocess.Popen([pref], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                        time.sleep(5) # Wait for startup
+                                        print(f"Sending play command to {pref}")
+                                        subprocess.run(["playerctl", "-p", pref, "play"])
+                                    except Exception as launch_err:
+                                        print(f"Failed to launch {pref}: {launch_err}")
+                                        speak(f"Unable to launch {pref}.")
+                    except Exception as e:
+                        print(f"Playerctl error: {e}")
+                    
+                    continue
+
+            # SKIP
+            if ("next" in clean_text or "skip" in clean_text) and ("track" in clean_text or "song" in clean_text or "music" in clean_text):
+                last_trigger_time = time.time()
+                acknowledge()
+                
+                try:
+                    if shutil.which("playerctl"):
+                        players_output = subprocess.check_output(["playerctl", "-l"], text=True).strip().split('\n')
+                        playing_now = []
+                        for p in players_output:
+                            if not p: continue
+                            try:
+                                status = subprocess.check_output(["playerctl", "-p", p, "status"], text=True).strip()
+                                if status == "Playing":
+                                    playing_now.append(p)
+                            except: pass
+                            
+                        if playing_now:
+                            for p in playing_now:
+                                subprocess.run(["playerctl", "-p", p, "next"])
+                        else:
+                             pref = m_settings.get("preferred_music_player", "spotify").lower().replace(" ", "")
+                             subprocess.run(["playerctl", "-p", pref, "next"])
+                except Exception as e:
+                    print(f"Playerctl error: {e}")
+                
+                continue
 
         # --- BRANCH 2: COMMANDS ---
         # Load settings for dynamic name

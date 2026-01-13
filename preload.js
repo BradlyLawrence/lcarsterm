@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Backup API
   selectBackupDir: () => ipcRenderer.invoke('select-backup-dir'),
   backupLogs: () => ipcRenderer.invoke('backup-logs'),
+  onAppShutdown: (callback) => ipcRenderer.on('app-shutdown', (_event, value) => callback(value)),
 
   // Session API
   saveSession: (state) => ipcRenderer.invoke('save-session', state),

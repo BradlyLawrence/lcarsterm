@@ -1,3 +1,11 @@
+# LCARS Terminal v2.2.1
+
+## ✨ New Features
+- **Shutdown Notification**: Added a new LCARS-styled "System Shutdown" screen. When exiting the application, the interface now visibly confirms that the voice subsystem is being terminated, preventing the appearance of the app "freezing" during cleanup.
+
+## 🐛 Bug Fixes
+- **Graceful Exit**: Fixed an issue where using the "Quit" option from the System Tray icon would forcefully close the application without properly shutting down the voice assistant process. It now performs the same graceful cleanup as the main window's exit button.
+
 # LCARS Terminal v2.2.0
 
 ## ✨ New Features

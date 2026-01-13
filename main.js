@@ -447,7 +447,6 @@ function updateTrayMenu() {
         { 
             label: 'Quit', 
             click: () => {
-                isQuitting = true;
                 app.quit(); 
             } 
         }
@@ -1079,12 +1078,19 @@ app.on('window-all-closed', function () {
 app.on('before-quit', (event) => {
   if (voiceProcess && !isQuitting) {
     event.preventDefault();
+    
+    // Notify renderer to show shutdown screen and ensure it's visible
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        if (!mainWindow.isVisible()) mainWindow.show();
+        mainWindow.webContents.send('app-shutdown');
+    }
+
     stopVoiceAssistant();
     // Give it a moment to die completely before quitting the app
     setTimeout(() => {
       isQuitting = true;
       app.quit();
-    }, 1000);
+    }, 1500);
   }
 });
 
