@@ -74,23 +74,29 @@ elif [ "$ACTION" == "playlist_80s" ]; then
     playerctl -p spotify play
 
 elif [ "$ACTION" == "play_playlist" ]; then
+    echo "DEBUG: Starting play_playlist with URI: $2" >> /tmp/lcars_voice_debug.log
     URI="$2"
     "$SCRIPT_DIR/ai-speak.sh" "Loading playlist."
 
     # 0. Pause everything else first
+    echo "DEBUG: Pausing other players" >> /tmp/lcars_voice_debug.log
     playerctl -a pause || true
 
     if ! pgrep -x "spotify" > /dev/null; then
+         echo "DEBUG: Spotify not running, launching..." >> /tmp/lcars_voice_debug.log
          export DISPLAY=:0
          nohup spotify >/dev/null 2>&1 & disown
-         sleep 4
+         sleep 5
     fi
 
     # Inject the command directly via DBus
     if [ -n "$URI" ]; then
-        dbus-send --print-reply --dest=org.mpris.MediaPlayer2.spotify /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.OpenUri string:"$URI"
-        sleep 2
-        playerctl -p spotify play
+        echo "DEBUG: Sending DBus command: $URI" >> /tmp/lcars_voice_debug.log
+        dbus-send --print-reply --dest=org.mpris.MediaPlayer2.spotify /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.OpenUri string:"$URI" >> /tmp/lcars_voice_debug.log 2>&1
+        echo "DEBUG: DBus command sent. Sleeping..." >> /tmp/lcars_voice_debug.log
+        sleep 3
+        echo "DEBUG: Forcing play..." >> /tmp/lcars_voice_debug.log
+        playerctl -p spotify play >> /tmp/lcars_voice_debug.log 2>&1
     else
         "$SCRIPT_DIR/ai-speak.sh" "Error. No playlist identifier provided."
     fi

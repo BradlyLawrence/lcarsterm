@@ -41,6 +41,9 @@ if getattr(sys, 'frozen', False):
 else:
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# FORCE UNBUFFERED OUTPUT
+sys.stdout.reconfigure(line_buffering=True)
+
 BASE_DIR = SCRIPT_DIR  # Alias for backward compatibility
 USER_DIR = os.environ.get("LCARS_WORKSPACE", SCRIPT_DIR)
 
@@ -138,6 +141,15 @@ for key, cmd in COMMANDS.items():
         needs_save = True
     elif "{base_dir}/startup-briefing.sh" in cmd:
         COMMANDS[key] = cmd.replace("{base_dir}/startup-briefing.sh", "{base_dir}/startup-briefing")
+        needs_save = True
+    
+    # Playlist Migration: Update old playlist_focus commands to new parameters
+    elif "playlist_focus" in cmd:
+        if "nostalgic" in key or "retro" in key or "80s" in key:
+             COMMANDS[key] = "{base_dir}/galactica-utils.sh play_playlist 'spotify:playlist:4NL0jkmwHxwat1797qV0JQ'"
+        else:
+             # Default to focus music for "play focus music", "concentration", etc.
+             COMMANDS[key] = "{base_dir}/galactica-utils.sh play_playlist 'spotify:playlist:2xWjjtCVKKxVcxifBWK3dI'"
         needs_save = True
 
 if needs_save:
@@ -497,6 +509,10 @@ while True:
         # Create a list of all valid names to check
         valid_names = [assistant_name] + phonetic_alternatives
 
+        # Log for debugging (only if "play" is involved to avoid spam)
+        if "play" in text:
+             print(f"DEBUG: Processing potential play command: {text}")
+
         # Check if ANY valid name is in the text for special commands
         name_detected = any(name in text for name in valid_names)
 
@@ -543,6 +559,10 @@ while True:
             if matched:
                 # We already checked time at the top, but let's be safe
                 print(f"Executing: {phrase}")
+                print(f"DEBUG: Raw Command Value: '{command}'")
+
+                if "play_playlist" in command:
+                     print(f"DEBUG: Triggering playlist command: {command}")
                 
                 # IMPORTANT: Update time BEFORE executing actions
                 last_trigger_time = time.time() 
@@ -558,6 +578,9 @@ while True:
                                        .replace("{surname}", surname)\
                                        .replace("{assistant_name}", assistant_name)\
                                        .replace("{base_dir}", f'"{BASE_DIR}"')
+
+                if "play_playlist" in command:
+                     print(f"DEBUG: Final Command: {final_command}")
 
                 os.system(final_command)
                 break
