@@ -140,6 +140,13 @@ def main():
     chosen_quote = chosen_quote.replace("{ASSISTANT_NAME}", assistant_name)
     chosen_quote = chosen_quote.replace("{SYSTEM_NAME}", socket.gethostname())
     
+    # Lowercase variants
+    chosen_quote = chosen_quote.replace("{user_name}", user_name)
+    chosen_quote = chosen_quote.replace("{user_rank}", user_rank)
+    chosen_quote = chosen_quote.replace("{user_surname}", user_surname)
+    chosen_quote = chosen_quote.replace("{assistant_name}", assistant_name)
+    chosen_quote = chosen_quote.replace("{system_name}", socket.gethostname())
+    
     # --- BUILD BRIEFING ---
     # Default config if not present
     default_config = ["greeting", "date", "weather", "disk", "quote"]

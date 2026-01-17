@@ -2,6 +2,7 @@
 import os
 import sys
 import json
+import socket
 import pyaudio
 import subprocess
 import time
@@ -283,7 +284,13 @@ def acknowledge():
         chosen = chosen.replace("{USER_RANK}", rank)\
                        .replace("{USER_NAME}", name)\
                        .replace("{USER_SURNAME}", surname)\
-                       .replace("{ASSISTANT_NAME}", assistant_name)
+                       .replace("{ASSISTANT_NAME}", assistant_name)\
+                       .replace("{SYSTEM_NAME}", socket.gethostname())\
+                       .replace("{rank}", rank)\
+                       .replace("{name}", name)\
+                       .replace("{surname}", surname)\
+                       .replace("{assistant_name}", assistant_name)\
+                       .replace("{system_name}", socket.gethostname())
                        
         speak(chosen)
     else:
@@ -573,11 +580,17 @@ while True:
                 name = current_settings.get("user_name") or "Bradly"
                 surname = current_settings.get("user_surname") or "User"
 
-                final_command = command.replace("{rank}", rank)\
-                                       .replace("{name}", name)\
-                                       .replace("{surname}", surname)\
+                final_command = command.replace("{user_rank}", rank)\
+                                       .replace("{user_name}", name)\
+                                       .replace("{user_surname}", surname)\
                                        .replace("{assistant_name}", assistant_name)\
-                                       .replace("{base_dir}", f'"{BASE_DIR}"')
+                                       .replace("{USER_RANK}", rank)\
+                                       .replace("{USER_NAME}", name)\
+                                       .replace("{USER_SURNAME}", surname)\
+                                       .replace("{ASSISTANT_NAME}", assistant_name)\
+                                       .replace("{base_dir}", f'"{BASE_DIR}"')\
+                                       .replace("{SYSTEM_NAME}", socket.gethostname())\
+                                       .replace("{system_name}", socket.gethostname())
 
                 if "play_playlist" in command:
                      print(f"DEBUG: Final Command: {final_command}")

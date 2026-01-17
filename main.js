@@ -718,10 +718,30 @@ ipcMain.handle('read-commands', async () => {
 
 ipcMain.handle('write-commands', async (event, commands) => {
     try {
-        fs.writeFileSync(USER_COMMANDS_PATH, JSON.stringify(commands, null, 4));
+        const tempPath = USER_COMMANDS_PATH + '.tmp';
+        fs.writeFileSync(tempPath, JSON.stringify(commands, null, 4));
+        fs.renameSync(tempPath, USER_COMMANDS_PATH);
+        
+        // Restart voice assistant so new commands are picked up immediately
+        if (voiceProcess) {
+             console.log('Commands updated. Restarting voice assistant...');
+             stopVoiceAssistant();
+             setTimeout(() => {
+                 startVoiceAssistant(false);
+             }, 1000);
+        }
+        
         return true;
     } catch (e) {
         console.error('Error writing commands:', e);
+        // Clean up temp file if it exists
+        try {
+            if (fs.existsSync(USER_COMMANDS_PATH + '.tmp')) {
+                fs.unlinkSync(USER_COMMANDS_PATH + '.tmp');
+            }
+        } catch (cleanupErr) {
+            console.error('Error cleaning up temp file:', cleanupErr);
+        }
         return false;
     }
 });
